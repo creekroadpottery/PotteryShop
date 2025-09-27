@@ -1020,8 +1020,8 @@ st.markdown("""
 # Navigation
 st.sidebar.title("Navigation")
 menu_options = [
-    "Dashboard",
-    "Strategic Event Planning", 
+    "Strategic Event Planning",
+    "Dashboard", 
     "Event Reflection Journal",
     "Business Insights",
     "Event Management",
@@ -1035,7 +1035,59 @@ if 'show_item_form' not in st.session_state:
     st.session_state['show_item_form'] = False
 
 # Main content
-if menu == "Dashboard":
+if menu == "Strategic Event Planning":
+    strategic_event_planning()
+
+elif menu == "Dashboard":
+    st.header("Overview Dashboard")
+    
+    # Quick stats
+    try:
+        with closing(get_conn()) as conn:
+            stats = pd.read_sql_query("""
+                SELECT 
+                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_events,
+                    COUNT(CASE WHEN status = 'planned' THEN 1 END) as planned_events,
+                    COALESCE(SUM(CASE WHEN status = 'completed' THEN total_revenue ELSE 0 END), 0) as total_revenue,
+                    COALESCE(AVG(CASE WHEN status = 'completed' THEN total_revenue ELSE NULL END), 0) as avg_revenue
+                FROM events
+            """, conn)
+            
+            items_count = pd.read_sql_query("SELECT COUNT(*) as count FROM items", conn)
+            
+            if not stats.empty:
+                col1, col2, col3, col4, col5 = st.columns(5)
+                with col1:
+                    st.metric("Items in Inventory", safe_int(items_count.iloc[0]['count']))
+                with col2:
+                    st.metric("Completed Events", safe_int(stats.iloc[0]['completed_events']))
+                with col3:
+                    st.metric("Planned Events", safe_int(stats.iloc[0]['planned_events']))
+                with col4:
+                    st.metric("Total Revenue", f"${safe_float(stats.iloc[0]['total_revenue']):,.2f}")
+                with col5:
+                    st.metric("Avg per Event", f"${safe_float(stats.iloc[0]['avg_revenue']):,.2f}")
+    except Exception as e:
+        st.error(f"Error loading dashboard: {e}")
+    
+    # Recent activity
+    st.subheader("Recent Activity")
+    
+    # Recent events
+    recent_events = get_events().head(5)
+    if not recent_events.empty:
+        st.markdown("**Recent Events:**")
+        for _, event in recent_events.iterrows():
+            status_icon = "✅" if event['status'] == 'completed' else "📅"
+            st.write(f"{status_icon} **{event['name']}** - {event['event_date']} ({event['status']})")
+    
+    # Recent reflections
+    recent_reflections = get_reflections().head(3)
+    if not recent_reflections.empty:
+        st.markdown("**Recent Reflections:**")
+        for _, reflection in recent_reflections.iterrows():
+            with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
+elif menu == "Dashboard":
     st.header("Overview Dashboard")
     
     # Quick stats
@@ -1085,9 +1137,6 @@ if menu == "Dashboard":
         for _, reflection in recent_reflections.iterrows():
             with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
                 st.write(reflection['content'][:200] + "..." if len(reflection['content']) > 200 else reflection['content'])
-
-elif menu == "Strategic Event Planning":
-    strategic_event_planning()
 
 elif menu == "Event Reflection Journal":
     reflection_journal()
