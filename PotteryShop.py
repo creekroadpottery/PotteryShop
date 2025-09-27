@@ -954,11 +954,6 @@ def event_management():
         event = events_df.iloc[event_idx]
         event_id = int(event['id'])  # Ensure it's an integer
         
-        # Debug: show what we found
-        st.write(f"Debug - Selected event: {selected_event}")
-        st.write(f"Debug - Event ID from database: {event_id}")
-        st.write(f"Debug - Event data: {event['name']} - {event['event_date']}")
-        
         st.subheader(f"Managing: {event['name']}")
         
         # Event summary
@@ -977,10 +972,6 @@ def event_management():
                 profit = event['total_revenue'] - event['booth_fee']
                 st.write(f"**Profit:** ${profit:.2f}")
         
-        # Show all events for debugging
-        with st.expander("Debug - All Events in Database"):
-            st.dataframe(events_df[['id', 'name', 'event_date', 'status']])
-        
         # Delete event option
         with st.expander("Danger Zone", expanded=False):
             st.warning("Delete this event and all related data")
@@ -992,7 +983,6 @@ def event_management():
                 
             if delete_clicked:
                 if confirm_delete:
-                    st.info(f"Attempting to delete event ID: {event_id}")
                     success = delete_event(event_id)
                     if success:
                         st.success("Event deleted successfully!")
