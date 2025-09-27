@@ -1761,6 +1761,75 @@ if menu == "🏠 Dashboard":
     else:
         st.info("No items in inventory yet. Add your first pottery piece!")
 
+elif menu == "📅 New Event":
+    st.header("📅 Create New Event")
+    event_form()
+    st.header("Pottery Shop & Business Intelligence")
+    st.write("Complete pottery business management: inventory, shows, strategy, and growth tracking.")
+    
+    # Quick stats with goal integration
+    events_df = get_events()
+    current_year = date.today().year
+    
+    col1, col2, col3 = st.columns(3)
+    
+    if not events_df.empty:
+        completed_events = events_df[events_df['status'] == 'completed']
+        current_year_events = completed_events[
+            pd.to_datetime(completed_events['event_date']).dt.year == current_year
+        ]
+        
+        if not current_year_events.empty:
+            with col1:
+                st.metric("This Year's Shows", len(current_year_events))
+            with col2:
+                st.metric("This Year's Revenue", f"${current_year_events['total_revenue'].sum():.2f}")
+            with col3:
+                st.metric("Average per Show", f"${current_year_events['total_revenue'].mean():.2f}")
+    
+    # Goal progress overview
+    auto_update_goals_from_events()
+    active_goals = get_active_goals()
+    
+    if not active_goals.empty:
+        st.subheader("🎯 Goal Progress Summary")
+        
+        current_year_goals = active_goals[active_goals['target_date'].str.startswith(str(current_year))]
+        
+        if not current_year_goals.empty:
+            for _, goal in current_year_goals.head(3).iterrows():  # Show top 3 goals
+                progress_percentage = (goal['current_value'] / goal['target_value']) * 100 if goal['target_value'] > 0 else 0
+                
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.write(f"**{goal['goal_name']}**")
+                    st.progress(min(progress_percentage / 100, 1.0))
+                with col2:
+                    st.write(f"{goal['current_value']:.0f} / {goal['target_value']:.0f}")
+                with col3:
+                    if progress_percentage >= 100:
+                        st.success("🎉 Done!")
+                    else:
+                        st.write(f"{progress_percentage:.1f}%")
+        
+        if len(active_goals) > 3:
+            st.info(f"View all {len(active_goals)} goals in Business Goals section")
+    else:
+        st.info("💡 Set up your first business goal to track progress throughout the year!")
+    
+    # Recent items summary
+    df = fetch_items_df()
+    if not df.empty:
+        top = df[["sku", "name", "qty_on_hand", "price", "category", "glaze", "updated_at"]].head(10)
+        st.subheader("Recent Items")
+        st.dataframe(top, use_container_width=True)
+        
+        # Download button for items
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download All Items CSV", data=csv, file_name="pottery_items.csv", mime="text/csv")
+    else:
+        st.info("No items in inventory yet. Add your first pottery piece!")
+
 elif menu == "Shows & Events":
     st.header("Shows & Events")
     
