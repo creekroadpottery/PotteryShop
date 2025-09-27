@@ -494,6 +494,253 @@ def get_business_insights():
     
     return insights
 
+def about_section():
+    """About Maker Strategy Pro"""
+    st.header("About Maker Strategy Pro")
+    
+    st.markdown("""
+    ### Strategic Planning for Creative Entrepreneurs
+    
+    Maker Strategy Pro is designed specifically for artists, craftspeople, and creative entrepreneurs who want to grow their business strategically while staying true to their artistic vision.
+    
+    **Why Strategy Matters for Artists:**
+    
+    Many talented artists struggle with the business side of their craft. They're excellent at creating beautiful work but find themselves asking:
+    - "How do I price my work appropriately?"
+    - "Which events should I prioritize?"
+    - "What should I make more of, and what should I stop making?"
+    - "How do I grow my business without losing my creative soul?"
+    
+    **The Core Philosophy:**
+    
+    At the heart of Maker Strategy Pro is one fundamental question: **"What change are you trying to make?"**
+    
+    This isn't just about selling products—it's about understanding your deeper purpose as an artist and how each business decision moves you toward that vision. Whether you're trying to:
+    - Build a sustainable full-time creative career
+    - Share a particular artistic vision with the world
+    - Connect with specific communities through your work
+    - Experiment with new techniques and markets
+    - Create financial freedom to pursue passion projects
+    
+    **Key Features:**
+    
+    🎯 **Strategic Event Planning** - Plan events with intention, focusing on your change goals rather than just revenue
+    
+    📊 **Business Insights Dashboard** - Data-driven recommendations for what to make more/less of, optimal pricing, and seasonal trends
+    
+    📝 **Event Reflection Journal** - Capture learnings from each event to continuously improve your approach
+    
+    📦 **Inventory Management** - Track your pieces and understand what sells best where
+    
+    📈 **Performance Analytics** - See which event types, price points, and strategies work best for your goals
+    
+    **Who This Is For:**
+    
+    - Pottery artists, jewelers, woodworkers, textile artists, painters, and other makers
+    - Artists selling at markets, fairs, galleries, and online
+    - Creatives who want to be more strategic about their business decisions
+    - Anyone who believes that business strategy and artistic integrity can work together
+    
+    **The Result:**
+    
+    Instead of guessing what to make or which events to attend, you'll have data-driven insights that help you make confident decisions aligned with your artistic and business goals. You'll spend less time on what doesn't work and more time creating the change you want to see in the world.
+    
+    ---
+    
+    **Built for artists, by artists.** Focus on your craft, grow your business.
+    """)
+
+def help_section():
+    """Help and user guide for Maker Strategy Pro"""
+    st.header("Help & User Guide")
+    
+    st.markdown("### Getting Started")
+    
+    with st.expander("Quick Start Guide", expanded=True):
+        st.markdown("""
+        **1. Plan Your First Event**
+        - Go to "Strategic Event Planning"
+        - Answer the key question: "What change are you trying to make?"
+        - Fill in event details and creative direction
+        - Save your event plan
+        
+        **2. Add Your Inventory**
+        - Go to "Inventory Management"
+        - Click "Add New Item"
+        - Add your pieces with SKUs, categories, glazes/finishes
+        - Track quantities and pricing
+        
+        **3. Track Event Performance**
+        - Go to "Event Management"
+        - Select your event and add inventory items
+        - Record what you brought vs. what you sold
+        - Mark event as completed with revenue data
+        
+        **4. Reflect and Learn**
+        - Go to "Event Reflection Journal"
+        - Capture insights, customer feedback, and learnings
+        - Note pricing observations and what worked/didn't work
+        
+        **5. Use Insights to Improve**
+        - Go to "Business Insights"
+        - Review make more/less recommendations
+        - Analyze price point performance
+        - Plan future events based on data
+        """)
+    
+    st.markdown("### Feature Guide")
+    
+    with st.expander("Strategic Event Planning"):
+        st.markdown("""
+        **Purpose:** Plan events with strategic intention, not just revenue goals.
+        
+        **Key Features:**
+        - **Change Goal Question:** The most important field - what change are you trying to make?
+        - **Creative Direction:** Define your theme, color palette, and artistic vision
+        - **Target Customer:** Identify who you're creating for
+        - **Pricing Strategy:** Plan your approach for this specific audience/venue
+        
+        **Tips:**
+        - Be specific about your change goal (e.g., "Test whether minimal ceramics appeal to urban professionals")
+        - Consider how each event fits your larger artistic journey
+        - Use theme planning to create cohesive collections
+        """)
+    
+    with st.expander("Event Reflection Journal"):
+        st.markdown("""
+        **Purpose:** Capture insights and learnings to improve future events.
+        
+        **Reflection Categories:**
+        - **What Worked Well:** Successes to repeat
+        - **What Didn't Work:** Things to avoid or change
+        - **Customer Interactions:** Feedback and observations
+        - **Pricing Observations:** Price sensitivity and market response
+        - **Next Time Planning:** Specific improvements for future events
+        
+        **Tips:**
+        - Reflect while memories are fresh (within 24-48 hours)
+        - Be honest about what didn't work
+        - Note specific customer quotes and feedback
+        - Track environmental factors (weather, foot traffic, neighboring vendors)
+        """)
+    
+    with st.expander("Business Insights Dashboard"):
+        st.markdown("""
+        **Purpose:** Get data-driven recommendations for business decisions.
+        
+        **Key Insights:**
+        - **Make More/Less Recommendations:** Based on sell-through rates
+        - **Price Point Analysis:** Which price ranges perform best
+        - **Seasonal Trends:** What sells well in different seasons
+        - **Event Type Performance:** ROI by venue type
+        
+        **How to Read Recommendations:**
+        - **MAKE MORE:** >80% sell-through rate - high demand
+        - **GOOD:** 50-80% sell-through rate - solid performers
+        - **REVIEW:** 20-50% sell-through rate - consider modifications
+        - **MAKE LESS:** <20% sell-through rate - low demand
+        """)
+    
+    with st.expander("Inventory Management"):
+        st.markdown("""
+        **Purpose:** Track your pieces and stock levels.
+        
+        **Key Fields:**
+        - **SKU:** Unique identifier for each piece type
+        - **Category:** Group similar items (bowls, mugs, etc.)
+        - **Clay Body/Primary Material:** Track material types
+        - **Glaze/Finish:** Track surface treatments
+        - **Price:** Base pricing for the item
+        
+        **Stock Movements:**
+        - **Positive:** Adding new pieces from kiln/workshop
+        - **Negative:** Sales, breakage, gifts
+        - Always include reference notes for tracking
+        """)
+    
+    with st.expander("Event Management"):
+        st.markdown("""
+        **Purpose:** Track what you bring to events and sales performance.
+        
+        **Workflow:**
+        1. Select an event you've planned
+        2. Add inventory items to the event
+        3. Record quantities brought and sold
+        4. Set pricing for the specific event
+        5. Analyze sell-through rates and revenue
+        
+        **Key Metrics:**
+        - **Sell-Through Rate:** Sold ÷ Brought (aim for 60-80%)
+        - **Revenue per Item:** Total revenue ÷ items brought
+        - **Profit:** Revenue - booth fees and expenses
+        """)
+    
+    st.markdown("### Best Practices")
+    
+    with st.expander("Strategic Thinking Tips"):
+        st.markdown("""
+        **Ask Better Questions:**
+        - Instead of "How much can I sell?" ask "What change am I trying to make?"
+        - Instead of "What should I make?" ask "Who am I creating for and why?"
+        - Instead of "Which event pays most?" ask "Which event aligns with my goals?"
+        
+        **Use Data, But Trust Your Intuition:**
+        - Let insights guide decisions, but remember your artistic vision matters
+        - Sometimes low-selling pieces serve important creative purposes
+        - Consider long-term brand building, not just immediate sales
+        
+        **Focus on Learning:**
+        - Every event is an experiment
+        - Track what you learn, not just what you earn
+        - Small insights compound into big improvements over time
+        """)
+    
+    with st.expander("Common Workflows"):
+        st.markdown("""
+        **Planning a New Event:**
+        1. Strategic Event Planning → Define change goal and creative direction
+        2. Business Insights → Review past performance for similar events
+        3. Inventory Management → Check stock levels and plan production
+        4. Event Management → Add planned inventory
+        
+        **After an Event:**
+        1. Event Management → Record actual sales and quantities
+        2. Event Reflection Journal → Capture insights while fresh
+        3. Business Insights → Review updated recommendations
+        4. Inventory Management → Adjust stock based on sales
+        
+        **Monthly Review:**
+        1. Dashboard → Review overall performance
+        2. Business Insights → Identify trends and patterns
+        3. Strategic Event Planning → Plan next month's events based on learnings
+        """)
+    
+    st.markdown("### Troubleshooting")
+    
+    with st.expander("Common Issues"):
+        st.markdown("""
+        **Can't Delete Events/Items:**
+        - Make sure to check the confirmation checkbox
+        - Events with related data (inventory, reflections) require confirmation
+        
+        **Data Not Updating:**
+        - Use the refresh/rerun button if data seems stale
+        - Check that you've saved changes before navigating away
+        
+        **Insights Show No Data:**
+        - You need at least 2 events with inventory tracking to see insights
+        - Make sure events are marked as "completed" with sales data
+        
+        **Sell-Through Rates Seem Wrong:**
+        - Verify quantities brought vs. sold are accurate
+        - Check that price data is entered correctly
+        - Remember rate is calculated as Sold ÷ Brought
+        """)
+    
+    st.markdown("---")
+    st.markdown("### Need More Help?")
+    st.info("Remember: This tool is designed to support your artistic journey, not replace your creative intuition. Use the insights to make informed decisions, but always stay true to your artistic vision.")
+
 # =============== UI COMPONENTS ===============
 
 def strategic_event_planning():
@@ -1123,7 +1370,9 @@ menu_options = [
     "Event Reflection Journal",
     "Business Insights",
     "Event Management",
-    "Inventory Management"
+    "Inventory Management",
+    "About",
+    "Help"
 ]
 
 menu = st.sidebar.selectbox("Go to", menu_options)
@@ -1198,6 +1447,12 @@ elif menu == "Event Management":
 
 elif menu == "Inventory Management":
     inventory_management()
+
+elif menu == "About":
+    about_section()
+
+elif menu == "Help":
+    help_section()
 
 # Footer
 st.sidebar.markdown("---")
