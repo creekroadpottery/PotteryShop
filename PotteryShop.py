@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import plotly.express as px
 from contextlib import closing
 from datetime import datetime, date
 
@@ -995,7 +994,8 @@ def analytics_dashboard():
     ) = calculate_event_metrics()
     if not revenue_by_type.empty:
         st.subheader("Average Revenue by Event Type")
-        st.plotly_chart(px.bar(revenue_by_type, x='event_type', y='avg_revenue'), use_container_width=True)
+        chart_data = revenue_by_type.set_index('event_type')['avg_revenue']
+        st.bar_chart(chart_data)
     if not top_items.empty:
         st.subheader("Top Items by Units Sold")
         st.dataframe(top_items, use_container_width=True)
