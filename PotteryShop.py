@@ -962,6 +962,53 @@ def event_management():
             with col11:
                 st.metric("Inventory Revenue", f"${event_inventory['revenue'].sum():.2f}")
 
+# Add these functions to your PotteryShop.py file after the existing database helper functions
+
+def delete_goal(goal_id):
+    """Delete a business goal and all its related progress/milestones"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        # Delete related records first
+        cur.execute("DELETE FROM goal_progress WHERE goal_id = ?", (goal_id,))
+        cur.execute("DELETE FROM goal_milestones WHERE goal_id = ?", (goal_id,))
+        # Delete the goal itself
+        cur.execute("DELETE FROM business_goals WHERE id = ?", (goal_id,))
+        conn.commit()
+
+def delete_promotion(promotion_id):
+    """Delete an event promotion"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM event_promotions WHERE id = ?", (promotion_id,))
+        conn.commit()
+
+def delete_event_inventory_row(inventory_id):
+    """Delete a single event inventory line item"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM event_inventory WHERE id = ?", (inventory_id,))
+        conn.commit()
+
+def delete_reflection(reflection_id):
+    """Delete an event reflection"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM event_reflections WHERE id = ?", (reflection_id,))
+        conn.commit()
+
+def delete_event(event_id):
+    """Delete an event and all related data"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        # Delete all related records first (foreign key constraints)
+        cur.execute("DELETE FROM event_promotions WHERE event_id = ?", (event_id,))
+        cur.execute("DELETE FROM event_inventory WHERE event_id = ?", (event_id,))
+        cur.execute("DELETE FROM event_reflections WHERE event_id = ?", (event_id,))
+        cur.execute("DELETE FROM event_environment WHERE event_id = ?", (event_id,))
+        # Finally delete the event itself
+        cur.execute("DELETE FROM events WHERE id = ?", (event_id,))
+        conn.commit()
+
 # =============== MAIN APPLICATION ===============
 
 st.set_page_config(
