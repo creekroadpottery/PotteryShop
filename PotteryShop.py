@@ -175,6 +175,16 @@ def fetch_item_by_sku(sku: str):
         st.error(f"Error fetching item: {e}")
         return None
 
+def delete_item(item_id):
+    try:
+        with closing(get_conn()) as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM stock_moves WHERE item_id = ?", (item_id,))
+            cur.execute("DELETE FROM items WHERE id = ?", (item_id,))
+            conn.commit()
+    except Exception as e:
+        st.error(f"Error deleting item: {e}")
+
 def record_move(item_id: int, move_type: str, quantity: float, reference: str = ""):
     try:
         with closing(get_conn()) as conn:
@@ -239,6 +249,20 @@ def get_event_by_id(event_id: int):
         st.error(f"Error loading event: {e}")
         return None
 
+def delete_event(event_id):
+    try:
+        with closing(get_conn()) as conn:
+            cur = conn.cursor()
+            # Delete all related records first (foreign key constraints)
+            cur.execute("DELETE FROM event_inventory WHERE event_id = ?", (event_id,))
+            cur.execute("DELETE FROM event_reflections WHERE event_id = ?", (event_id,))
+            cur.execute("DELETE FROM event_environment WHERE event_id = ?", (event_id,))
+            # Finally delete the event itself
+            cur.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            conn.commit()
+    except Exception as e:
+        st.error(f"Error deleting event: {e}")
+
 def add_event_inventory(event_id, sku, name, brought, sold, price):
     try:
         with closing(get_conn()) as conn:
@@ -264,6 +288,15 @@ def get_event_inventory(event_id):
     except Exception as e:
         st.error(f"Error loading event inventory: {e}")
         return pd.DataFrame()
+
+def delete_event_inventory_row(inventory_id):
+    try:
+        with closing(get_conn()) as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM event_inventory WHERE id = ?", (inventory_id,))
+            conn.commit()
+    except Exception as e:
+        st.error(f"Error deleting inventory row: {e}")
 
 def add_reflection(event_id, category, content, customer_interaction=False, price_point_insight=False):
     try:
@@ -296,6 +329,15 @@ def get_reflections(event_id=None):
     except Exception as e:
         st.error(f"Error loading reflections: {e}")
         return pd.DataFrame()
+
+def delete_reflection(reflection_id):
+    try:
+        with closing(get_conn()) as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM event_reflections WHERE id = ?", (reflection_id,))
+            conn.commit()
+    except Exception as e:
+        st.error(f"Error deleting reflection: {e}")
 
 def add_environment_data(event_id, environment_data):
     try:
@@ -652,9 +694,9 @@ def reflection_journal():
                 
                 flags = []
                 if reflection['customer_interaction']:
-                    flags.append("👥 Customer")
+                    flags.append("Customer")
                 if reflection['price_point_insight']:
-                    flags.append("💰 Pricing")
+                    flags.append("Pricing")
                 flag_str = " | ".join(flags)
                 
                 title = f"{reflection['category']} - {date_str}"
@@ -710,7 +752,7 @@ def business_insights_dashboard():
         col3, col4, col5 = st.columns(3)
         
         with col3:
-            st.markdown("**🟢 MAKE MORE**")
+            st.markdown("**MAKE MORE**")
             st.caption("High demand items (>80% sell-through)")
             if not make_more.empty:
                 for _, item in make_more.iterrows():
@@ -719,14 +761,14 @@ def business_insights_dashboard():
                 st.write("No high-demand items yet")
         
         with col4:
-            st.markdown("**🟡 REVIEW**")
+            st.markdown("**REVIEW**")
             st.caption("Moderate performance (20-80% sell-through)")
             if not review.empty:
                 for _, item in review.head(3).iterrows():
                     st.write(f"• **{item['item_name']}** - {item['avg_sell_through_rate']:.1%}")
         
         with col5:
-            st.markdown("**🔴 MAKE LESS**")
+            st.markdown("**MAKE LESS**")
             st.caption("Lower demand items (<20% sell-through)")
             if not make_less.empty:
                 for _, item in make_less.iterrows():
@@ -906,6 +948,18 @@ def event_management():
                 profit = event['total_revenue'] - event['booth_fee']
                 st.write(f"**Profit:** ${profit:.2f}")
         
+        # Delete event option
+        with st.expander("Danger Zone", expanded=False):
+            st.warning("Delete this event and all related data")
+            col_del1, col_del2 = st.columns(2)
+            with col_del1:
+                confirm_delete = st.checkbox("I understand this cannot be undone")
+            with col_del2:
+                if st.button("Delete Event", type="secondary") and confirm_delete:
+                    delete_event(event_id)
+                    st.success("Event deleted")
+                    st.rerun()
+        
         # Inventory management for this event
         st.subheader("Event Inventory")
         
@@ -949,6 +1003,18 @@ def event_management():
             
             st.dataframe(event_inventory, use_container_width=True)
             
+            # Delete inventory rows
+            with st.expander("Delete Inventory Items"):
+                for _, row in event_inventory.iterrows():
+                    col_item, col_delete = st.columns([3, 1])
+                    with col_item:
+                        st.write(f"{row['item_name']} - Brought: {row['quantity_brought']}, Sold: {row['quantity_sold']}")
+                    with col_delete:
+                        if st.button("Delete", key=f"del_inv_{row['id']}"):
+                            delete_event_inventory_row(row['id'])
+                            st.success("Deleted inventory item")
+                            st.rerun()
+            
             # Summary metrics
             col8, col9, col10, col11 = st.columns(4)
             with col8:
@@ -961,53 +1027,6 @@ def event_management():
                 st.metric("Overall Sell-Through", f"{overall_sell_through:.1f}%")
             with col11:
                 st.metric("Inventory Revenue", f"${event_inventory['revenue'].sum():.2f}")
-
-# Add these functions to your PotteryShop.py file after the existing database helper functions
-
-def delete_goal(goal_id):
-    """Delete a business goal and all its related progress/milestones"""
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        # Delete related records first
-        cur.execute("DELETE FROM goal_progress WHERE goal_id = ?", (goal_id,))
-        cur.execute("DELETE FROM goal_milestones WHERE goal_id = ?", (goal_id,))
-        # Delete the goal itself
-        cur.execute("DELETE FROM business_goals WHERE id = ?", (goal_id,))
-        conn.commit()
-
-def delete_promotion(promotion_id):
-    """Delete an event promotion"""
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM event_promotions WHERE id = ?", (promotion_id,))
-        conn.commit()
-
-def delete_event_inventory_row(inventory_id):
-    """Delete a single event inventory line item"""
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM event_inventory WHERE id = ?", (inventory_id,))
-        conn.commit()
-
-def delete_reflection(reflection_id):
-    """Delete an event reflection"""
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        cur.execute("DELETE FROM event_reflections WHERE id = ?", (reflection_id,))
-        conn.commit()
-
-def delete_event(event_id):
-    """Delete an event and all related data"""
-    with closing(get_conn()) as conn:
-        cur = conn.cursor()
-        # Delete all related records first (foreign key constraints)
-        cur.execute("DELETE FROM event_promotions WHERE event_id = ?", (event_id,))
-        cur.execute("DELETE FROM event_inventory WHERE event_id = ?", (event_id,))
-        cur.execute("DELETE FROM event_reflections WHERE event_id = ?", (event_id,))
-        cur.execute("DELETE FROM event_environment WHERE event_id = ?", (event_id,))
-        # Finally delete the event itself
-        cur.execute("DELETE FROM events WHERE id = ?", (event_id,))
-        conn.commit()
 
 # =============== MAIN APPLICATION ===============
 
@@ -1059,7 +1078,7 @@ except Exception as e:
 # Header
 st.markdown("""
 <div class="main-header">
-    <h1>🏺 Pottery Strategy Pro</h1>
+    <h1>Pottery Strategy Pro</h1>
     <p>Strategic planning and business insights for pottery artists</p>
 </div>
 """, unsafe_allow_html=True)
@@ -1084,59 +1103,6 @@ if 'show_item_form' not in st.session_state:
 # Main content
 if menu == "Strategic Event Planning":
     strategic_event_planning()
-
-elif menu == "Dashboard":
-    st.header("Overview Dashboard")
-    
-    # Quick stats
-    try:
-        with closing(get_conn()) as conn:
-            stats = pd.read_sql_query("""
-                SELECT 
-                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_events,
-                    COUNT(CASE WHEN status = 'planned' THEN 1 END) as planned_events,
-                    COALESCE(SUM(CASE WHEN status = 'completed' THEN total_revenue ELSE 0 END), 0) as total_revenue,
-                    COALESCE(AVG(CASE WHEN status = 'completed' THEN total_revenue ELSE NULL END), 0) as avg_revenue
-                FROM events
-            """, conn)
-            
-            items_count = pd.read_sql_query("SELECT COUNT(*) as count FROM items", conn)
-            
-            if not stats.empty:
-                col1, col2, col3, col4, col5 = st.columns(5)
-                with col1:
-                    st.metric("Items in Inventory", safe_int(items_count.iloc[0]['count']))
-                with col2:
-                    st.metric("Completed Events", safe_int(stats.iloc[0]['completed_events']))
-                with col3:
-                    st.metric("Planned Events", safe_int(stats.iloc[0]['planned_events']))
-                with col4:
-                    st.metric("Total Revenue", f"${safe_float(stats.iloc[0]['total_revenue']):,.2f}")
-                with col5:
-                    st.metric("Avg per Event", f"${safe_float(stats.iloc[0]['avg_revenue']):,.2f}")
-    except Exception as e:
-        st.error(f"Error loading dashboard: {e}")
-    
-    # Recent activity
-    st.subheader("Recent Activity")
-    
-    # Recent events
-    recent_events = get_events().head(5)
-    if not recent_events.empty:
-        st.markdown("**Recent Events:**")
-        for _, event in recent_events.iterrows():
-            status_icon = "✅" if event['status'] == 'completed' else "📅"
-            st.write(f"{status_icon} **{event['name']}** - {event['event_date']} ({event['status']})")
-    
-    # Recent reflections
-                recent_reflections = get_reflections().head(3)
-                if not refl.empty:
-                    st.subheader("Previous Reflections")
-                    for _, reflection in refl.iterrows():
-                        # Note: Using 'category' since 'event_name' doesn't exist in the reflections table
-                        with st.expander(f"{reflection['category']} - {reflection['created_at'][:10]}"):
-                            st.write(reflection['content'])
-                            # Add any additional reflection details here
 
 elif menu == "Dashboard":
     st.header("Overview Dashboard")
