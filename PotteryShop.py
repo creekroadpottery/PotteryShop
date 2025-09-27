@@ -1031,7 +1031,7 @@ def event_management():
 # =============== MAIN APPLICATION ===============
 
 st.set_page_config(
-    page_title="Pottery Strategy Pro", 
+    page_title="Maker Strategy Pro", 
     page_icon="🏺", 
     layout="wide"
 )
@@ -1078,8 +1078,8 @@ except Exception as e:
 # Header
 st.markdown("""
 <div class="main-header">
-    <h1>Pottery Strategy Pro</h1>
-    <p>Strategic planning and business insights for pottery artists</p>
+    <h1>Maker Strategy Pro</h1>
+    <p>Strategic planning and business insights for artists</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1169,6 +1169,6 @@ elif menu == "Inventory Management":
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.markdown("### Pottery Strategy Pro")
-st.sidebar.markdown("*Strategic planning and business insights for pottery artists*")
+st.sidebar.markdown("### Maker Strategy Pro")
+st.sidebar.markdown("*Strategic planning and business insights for artists*")
 st.sidebar.markdown("Focus on your craft, grow your business")
