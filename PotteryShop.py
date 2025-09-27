@@ -4,8 +4,6 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, date
 from io import BytesIO
-import plotly.express as px
-import plotly.graph_objects as go
 
 DB_PATH = "pottery_shop.db"
 
@@ -1263,14 +1261,14 @@ def yearly_dashboard():
         
         col1, col2 = st.columns(2)
         with col1:
-            fig = px.bar(monthly_breakdown, x='month_name', y='revenue',
-                        title=f"{selected_year} Revenue by Month")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = monthly_breakdown.set_index('month_name')['revenue']
+            st.subheader(f"{selected_year} Revenue by Month")
+            st.bar_chart(chart_data)
         
         with col2:
-            fig = px.line(monthly_breakdown, x='month_name', y='revenue',
-                         title=f"{selected_year} Revenue Trend")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = monthly_breakdown.set_index('month_name')['revenue']
+            st.subheader(f"{selected_year} Revenue Trend")
+            st.line_chart(chart_data)
         
         st.dataframe(monthly_breakdown[['month_name', 'revenue', 'events']], use_container_width=True)
     
@@ -1286,14 +1284,14 @@ def yearly_dashboard():
         
         col1, col2 = st.columns(2)
         with col1:
-            fig = px.bar(comparison_data, x='Year', y='Revenue',
-                        title="Revenue Comparison")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = comparison_data.set_index('Year')['Revenue']
+            st.subheader("Revenue Comparison")
+            st.bar_chart(chart_data)
         
         with col2:
-            fig = px.bar(comparison_data, x='Year', y='Events',
-                        title="Events Comparison")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = comparison_data.set_index('Year')['Events']
+            st.subheader("Events Comparison")
+            st.bar_chart(chart_data)
         
         # Growth insights
         if revenue_growth > 0:
@@ -1378,16 +1376,15 @@ def yearly_dashboard():
         
         col1, col2 = st.columns(2)
         with col1:
-            fig = px.bar(price_analysis, x='price_range', y='avg_sell_through_rate',
-                        title="Sell-Through Rate by Price Range",
-                        labels={'avg_sell_through_rate': 'Sell-Through Rate'})
-            fig.update_yaxis(tickformat=".1%")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = price_analysis.set_index('price_range')['avg_sell_through_rate']
+            st.subheader("Sell-Through Rate by Price Range")
+            st.bar_chart(chart_data)
+            st.caption("Higher bars = better sell-through rates")
         
         with col2:
-            fig = px.bar(price_analysis, x='price_range', y='total_revenue',
-                        title="Total Revenue by Price Range")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = price_analysis.set_index('price_range')['total_revenue']
+            st.subheader("Total Revenue by Price Range")
+            st.bar_chart(chart_data)
         
         # Price insights
         best_price_range = price_analysis.loc[price_analysis['avg_sell_through_rate'].idxmax()]
@@ -1409,15 +1406,14 @@ def yearly_dashboard():
         
         col1, col2 = st.columns(2)
         with col1:
-            fig = px.bar(seasonal_summary.reset_index(), x='season', y='Total Sold',
-                        title="Sales Volume by Season")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = seasonal_summary.reset_index().set_index('season')['Total Sold']
+            st.subheader("Sales Volume by Season")
+            st.bar_chart(chart_data)
         
         with col2:
-            fig = px.bar(seasonal_summary.reset_index(), x='season', y='Avg Sell-Through',
-                        title="Sell-Through Rate by Season")
-            fig.update_yaxis(tickformat=".1%")
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = seasonal_summary.reset_index().set_index('season')['Avg Sell-Through']
+            st.subheader("Sell-Through Rate by Season")
+            st.bar_chart(chart_data)
         
         # Best sellers by season
         st.write("**Top Items by Season:**")
@@ -1500,10 +1496,9 @@ def yearly_dashboard():
         st.subheader("🎨 Theme Performance Analysis")
         st.dataframe(theme_performance, use_container_width=True)
         
-        fig = px.bar(theme_performance.head(5), x='theme', y='avg_revenue',
-                    title="Top 5 Performing Themes by Average Revenue")
-        fig.update_xaxes(tickangle=45)
-        st.plotly_chart(fig, use_container_width=True)
+        chart_data = theme_performance.head(5).set_index('theme')['avg_revenue']
+        st.subheader("Top 5 Performing Themes by Average Revenue")
+        st.bar_chart(chart_data)
     
     # Promotion effectiveness
     if not promotion_effectiveness.empty:
@@ -1514,10 +1509,9 @@ def yearly_dashboard():
             st.dataframe(promotion_effectiveness, use_container_width=True)
         
         with col2:
-            fig = px.bar(promotion_effectiveness, x='promotion_type', y='avg_attributed_sales',
-                        title="Average Sales by Promotion Type")
-            fig.update_xaxes(tickangle=45)
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = promotion_effectiveness.set_index('promotion_type')['avg_attributed_sales']
+            st.subheader("Average Sales by Promotion Type")
+            st.bar_chart(chart_data)
         
         # ROI calculation for promotions
         total_promotion_sales = promotion_effectiveness['total_attributed_sales'].sum()
@@ -1533,10 +1527,9 @@ def yearly_dashboard():
             st.dataframe(top_items, use_container_width=True)
         
         with col2:
-            fig = px.bar(top_items.head(5), x='item_name', y='total_sold',
-                        title="Top 5 Best Selling Items")
-            fig.update_xaxes(tickangle=45)
-            st.plotly_chart(fig, use_container_width=True)
+            chart_data = top_items.head(5).set_index('item_name')['total_sold']
+            st.subheader("Top 5 Best Selling Items")
+            st.bar_chart(chart_data)
     
     # Strategic insights summary
     st.subheader("🧠 Strategic Insights Summary")
