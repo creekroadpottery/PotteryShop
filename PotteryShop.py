@@ -492,11 +492,117 @@ def get_reflections(event_id):
             conn, params=(event_id,)
         )
 
-# ---------- Existing pottery functions (simplified for space)
+# ---------- Existing pottery functions (complete implementations)
 
 def upsert_item(row):
-    # Existing function from original code
-    pass
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow().isoformat()
+        cur.execute(
+            """
+            INSERT INTO items (sku, name, category, clay_body, glaze, size, price, qty_on_hand, location, notes, image_path, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(sku) DO UPDATE SET
+                name=excluded.name,
+                category=excluded.category,
+                clay_body=excluded.clay_body,
+                glaze=excluded.glaze,
+                size=excluded.size,
+                price=excluded.price,
+                qty_on_hand=excluded.qty_on_hand,
+                location=excluded.location,
+                notes=excluded.notes,
+                image_path=excluded.image_path,
+                updated_at=?
+            """,
+            (
+                row.get("sku"),
+                row.get("name"),
+                row.get("category"),
+                row.get("clay_body"),
+                row.get("glaze"),
+                row.get("size"),
+                float(row.get("price", 0) or 0),
+                float(row.get("qty_on_hand", 0) or 0),
+                row.get("location"),
+                row.get("notes"),
+                row.get("image_path"),
+                now,
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+
+def fetch_item_by_sku(sku):
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM items WHERE sku = ?", (sku,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        cols = [c[0] for c in cur.description]
+        return dict(zip(cols, row))
+
+def record_move(item_id, move_type, quantity, reference=""):
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow().isoformat()
+        cur.execute(
+            "INSERT INTO stock_moves (item_id, move_type, quantity, reference, moved_at) VALUES (?, ?, ?, ?, ?)",
+            (item_id, move_type, quantity, reference, now),
+        )
+        cur.execute(
+            "UPDATE items SET qty_on_hand = qty_on_hand + ?, updated_at = ? WHERE id = ?",
+            (quantity, now, item_id),
+        )
+        conn.commit()
+
+def delete_item(item_id):
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM stock_moves WHERE item_id = ?", (item_id,))
+        cur.execute("DELETE FROM items WHERE id = ?", (item_id,))
+        conn.commit()
+
+def item_form(existing=None):
+    sku = st.text_input("SKU", value=(existing or {}).get("sku", "")).strip()
+    name = st.text_input("Name", value=(existing or {}).get("name", "")).strip()
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        category = st.text_input("Category", value=(existing or {}).get("category", ""))
+        size = st.text_input("Size", value=(existing or {}).get("size", ""))
+        location = st.text_input("Location", value=(existing or {}).get("location", ""))
+    with col2:
+        clay_body = st.text_input("Clay body", value=(existing or {}).get("clay_body", ""))
+        glaze = st.text_input("Glaze", value=(existing or {}).get("glaze", ""))
+        price = st.number_input("Price", min_value=0.0, value=float((existing or {}).get("price") or 0.0), step=0.5)
+    with col3:
+        qty_on_hand = st.number_input("Quantity on hand", min_value=0.0, value=float((existing or {}).get("qty_on_hand") or 0.0), step=1.0)
+        image_path = st.text_input("Image path or URL", value=(existing or {}).get("image_path", ""))
+        notes = st.text_area("Notes", value=(existing or {}).get("notes", ""))
+
+    if st.button("Save item", type="primary"):
+        if not sku or not name:
+            st.error("SKU and Name are required")
+            return None
+        row = {
+            "sku": sku,
+            "name": name,
+            "category": category,
+            "clay_body": clay_body,
+            "glaze": glaze,
+            "size": size,
+            "price": price,
+            "qty_on_hand": qty_on_hand,
+            "location": location,
+            "notes": notes,
+            "image_path": image_path,
+        }
+        upsert_item(row)
+        st.success("Item saved")
+        return sku
+    return None
 
 def fetch_items_df(search=""):
     with closing(get_conn()) as conn:
@@ -1171,7 +1277,7 @@ def goals_manager():
                 }
                 goal_id = create_goal(goal_data)
                 st.success(f"Goal created! ID: {goal_id}")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Please fill in goal name and target value")
     
@@ -1198,7 +1304,7 @@ def goals_manager():
         if st.button("Update Progress"):
             update_goal_progress(selected_goal['id'], new_value, progress_notes)
             st.success("Progress updated!")
-            st.experimental_rerun()
+            st.rerun()
 
 def yearly_dashboard():
     st.header("📈 Annual Business Dashboard")
@@ -1648,6 +1754,12 @@ if menu == "🏠 Dashboard":
         top = df[["sku", "name", "qty_on_hand", "price", "category", "glaze", "updated_at"]].head(10)
         st.subheader("Recent Items")
         st.dataframe(top, use_container_width=True)
+        
+        # Download button for items
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("Download All Items CSV", data=csv, file_name="pottery_items.csv", mime="text/csv")
+    else:
+        st.info("No items in inventory yet. Add your first pottery piece!")
 
 elif menu == "Shows & Events":
     st.header("Shows & Events")
