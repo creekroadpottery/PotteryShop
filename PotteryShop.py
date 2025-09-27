@@ -565,7 +565,7 @@ def enhanced_metrics_display():
     try:
         with closing(get_conn()) as conn:
             yearly_stats = pd.read_sql_query("""
-                SELECT SUM(total_revenue) as total_revenue, COUNT(*) as total_events
+                SELECT COALESCE(SUM(total_revenue), 0) as total_revenue, COUNT(*) as total_events
                 FROM events WHERE status = 'completed' AND strftime('%Y', event_date) = ?
             """, conn, params=(str(current_year),))
         
@@ -573,31 +573,37 @@ def enhanced_metrics_display():
             total_revenue = safe_float(yearly_stats.iloc[0]['total_revenue'])
             total_events = safe_int(yearly_stats.iloc[0]['total_events'])
             
-            level, level_desc = calculate_pottery_level(total_revenue, total_events)
-            st.markdown(f"### {level}")
-            st.caption(level_desc)
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.metric("💰 This Year's Earnings", f"${total_revenue:,.2f}",
-                         delta=f"{pottery_celebration()}" if total_revenue > 0 else None)
-            
-            with col2:
-                st.metric("🎪 Shows Conquered", total_events,
-                         delta="Keep it up!" if total_events > 0 else None)
-            
-            with col3:
-                avg_per_event = total_revenue / max(total_events, 1)
-                st.metric("⚡ Avg per Show", f"${avg_per_event:.2f}",
-                         delta="Strong!" if avg_per_event > 500 else "Growing!")
-            
-            with col4:
-                st.metric("🚀 Momentum", "🔥 Hot Streak!" if total_events > 0 else "📈 Getting Started!",
-                         delta="Keep the energy up!")
+            # Only show if there's actual data
+            if total_events > 0 or total_revenue > 0:
+                level, level_desc = calculate_pottery_level(total_revenue, total_events)
+                st.markdown(f"### {level}")
+                st.caption(level_desc)
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("💰 This Year's Earnings", f"${total_revenue:,.2f}",
+                             delta=f"{pottery_celebration()}" if total_revenue > 0 else None)
+                
+                with col2:
+                    st.metric("🎪 Shows Conquered", total_events,
+                             delta="Keep it up!" if total_events > 0 else None)
+                
+                with col3:
+                    avg_per_event = total_revenue / max(total_events, 1)
+                    st.metric("⚡ Avg per Show", f"${avg_per_event:.2f}",
+                             delta="Strong!" if avg_per_event > 500 else "Growing!")
+                
+                with col4:
+                    st.metric("🚀 Momentum", "🔥 Hot Streak!" if total_events > 0 else "📈 Getting Started!",
+                             delta="Keep the energy up!")
+            else:
+                # New user encouragement
+                st.info("📊 **Ready to start tracking?** Complete your first event to see beautiful metrics here!")
     
     except Exception as e:
-        st.error(f"Error loading metrics: {e}")
+        st.error(f"Error loading metrics: {str(e)[:50]}...")
+        st.info("📊 Metrics will appear here once you complete some events!")
 
 def pottery_item_showcase():
     """Show top items in a visually appealing way"""
@@ -820,9 +826,13 @@ st.sidebar.markdown("*Where clay meets data* ✨")
 # Demo data option for new users
 if st.sidebar.button("🎭 Try Demo Data"):
     if st.sidebar.checkbox("I understand this will add sample data"):
-        add_demo_data()
-        st.sidebar.success("🎉 Demo data added! Explore the app!")
-        st.rerun()
+        try:
+            add_demo_data()
+            st.sidebar.success("🎉 Demo data added! Explore the app!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Error adding demo data: {str(e)[:50]}...")
+            st.sidebar.info("No worries! You can still use the app manually.")
 
 menu_options = [
     "🏠 Dashboard", "🎪 Shows & Events", "📊 Analytics", "🎯 Smart Planning",
