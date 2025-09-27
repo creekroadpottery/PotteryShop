@@ -1575,20 +1575,20 @@ st.set_page_config(page_title="Pottery Shop & Events", page_icon="🧱", layout=
 init_db()
 
 menu = st.sidebar.selectbox("Go to", [
-    "Dashboard", 
-    "Items", 
-    "New item", 
-    "Import or Export",
-    "Shows & Events",
-    "New Event",
-    "Event Analytics",
-    "Smart Planning",
-    "Business Goals",
-    "Yearly Dashboard"
+    "📅 New Event",
+    "🎯 Smart Planning", 
+    "📋 Manage Events",
+    "📊 Event Analytics",
+    "🏠 Dashboard",
+    "🏺 Items",
+    "➕ New Item",
+    "📈 Business Goals",
+    "📆 Yearly Review",
+    "💾 Import/Export"
 ]) 
 
 # Existing menu items (simplified for space)
-if menu == "Dashboard":
+if menu == "🏠 Dashboard":
     st.header("Pottery Shop & Business Intelligence")
     st.write("Complete pottery business management: inventory, shows, strategy, and growth tracking.")
     
