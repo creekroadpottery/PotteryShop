@@ -1133,7 +1133,8 @@ elif menu == "Dashboard":
     if not recent_reflections.empty:
         st.markdown("**Recent Reflections:**")
         for _, reflection in recent_reflections.iterrows():
-            with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
+        with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
+
 elif menu == "Dashboard":
     st.header("Overview Dashboard")
     
