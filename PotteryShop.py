@@ -939,10 +939,21 @@ def goals_manager():
             new_val = st.number_input("New Value", min_value=0.0, value=float(sel['current_value']), step=1.0)
         with col2:
             notes = st.text_input("Notes")
-        if st.button("Update Progress"):
-            update_goal_progress(sel['id'], new_val, notes)
-            st.success("Updated")
-            st.experimental_rerun()
+        cA, cB = st.columns(2)
+        with cA:
+            if st.button("Update Progress"):
+                update_goal_progress(sel['id'], new_val, notes)
+                st.success("Updated")
+                st.experimental_rerun()
+        with cB:
+            del_confirm = st.checkbox("Confirm delete")
+            if st.button("Delete Goal"):
+                if del_confirm:
+                    delete_goal(int(sel['id']))
+                    st.success("Goal deleted")
+                    st.experimental_rerun()
+                else:
+                    st.warning("Check confirm delete first")
 
 def yearly_dashboard():
     st.header("Annual Business Dashboard")
@@ -1008,6 +1019,61 @@ def analytics_dashboard():
 st.set_page_config(page_title="Pottery Shop & Events", page_icon="🧱", layout="wide")
 init_db()
 
+# ---- Promotions and Event Inventory managers (with delete) ----
+
+def promotion_manager(event_id):
+    st.subheader("Promotion Planning & Tracking")
+    promos = get_event_promotions(event_id)
+    if not promos.empty:
+        for _, promo in promos.iterrows():
+            with st.expander(f"{promo['promotion_type']} - {promo['platform']} on {promo['scheduled_date']}"):
+                st.write(promo)
+                if st.button("Delete promotion", key=f"del_promo_{promo['id']}"):
+                    delete_promotion(int(promo['id']))
+                    st.success("Deleted promotion")
+                    st.experimental_rerun()
+    else:
+        st.info("No promotions yet.")
+    with st.expander("Add promotion"):
+        col1, col2 = st.columns(2)
+        with col1:
+            ptype = st.text_input("Type")
+            platform = st.text_input("Platform")
+            sched = st.date_input("Scheduled date")
+        with col2:
+            audience = st.text_input("Target audience")
+            goal = st.text_input("Engagement goal")
+        content = st.text_area("Content")
+        leads = st.number_input("Leads generated", min_value=0)
+        sales_attr = st.number_input("Sales attributed", min_value=0.0, step=0.01)
+        if st.button("Add promotion"):
+            add_promotion(event_id, {
+                "promotion_type": ptype,
+                "platform": platform,
+                "content": content,
+                "scheduled_date": sched,
+                "target_audience": audience,
+                "engagement_goal": goal,
+                "actual_engagement": "",
+                "leads_generated": leads,
+                "sales_attributed": sales_attr,
+            })
+            st.success("Added")
+            st.experimental_rerun()
+
+def event_inventory_quick_delete(event_id):
+    inv = get_event_inventory(event_id)
+    if inv.empty:
+        st.info("No inventory linked to this event yet.")
+        return
+    st.subheader("Current Event Inventory")
+    st.dataframe(inv, use_container_width=True)
+    for _, row in inv.iterrows():
+        if st.button("Delete line", key=f"invdel_{row['id']}"):
+            delete_event_inventory_row(int(row['id']))
+            st.success("Deleted line")
+            st.experimental_rerun()
+
 menu = st.sidebar.selectbox(
     "Go to",
     [
@@ -1066,6 +1132,16 @@ elif menu == "Shows & Events":
             event_id = events_df.iloc[names.index(pick)]['id']
             event = get_event_by_id(event_id)
             st.subheader(f"Managing: {event['name']}")
+            col_del1, col_del2 = st.columns([3,1])
+            with col_del2:
+                confirm = st.checkbox("Confirm delete", key=f"confirm_del_evt_{event['id']}")
+                if st.button("Delete Event", key=f"del_evt_{event['id']}"):
+                    if confirm:
+                        delete_event(int(event['id']))
+                        st.success("Event deleted")
+                        st.experimental_rerun()
+                    else:
+                        st.warning("Check confirm delete first")
             tab1, tab2, tab3, tab4 = st.tabs(["Event Strategy", "Promotions", "Inventory", "Reflections"])
             with tab1:
                 c1, c2 = st.columns(2)
@@ -1084,6 +1160,7 @@ elif menu == "Shows & Events":
                     with c5: st.metric("ROI", f"{((event['total_revenue'] - max(event['booth_fee'],0)) / max(event['booth_fee'],1) * 100):.1f}%")
             with tab2:
                 promotion_manager(event_id)
+                st.caption("Tip: delete or add promos below. Changes save instantly.")
             with tab3:
                 # Quick add from inventory
                 items_df = fetch_items_df()
@@ -1111,6 +1188,12 @@ elif menu == "Shows & Events":
                     inv['revenue'] = inv['quantity_sold'] * inv['price_at_event']
                     st.subheader("Current Event Inventory")
                     st.dataframe(inv, use_container_width=True)
+                    # Quick delete controls per line
+                    for _, row in inv.iterrows():
+                        if st.button("Delete line", key=f"del_line_{row['id']}"):
+                            delete_event_inventory_row(int(row['id']))
+                            st.success("Deleted")
+                            st.experimental_rerun()
                     c1, c2, c3 = st.columns(3)
                     with c1: st.metric("Total Brought", int(inv['quantity_brought'].sum()))
                     with c2: st.metric("Total Sold", int(inv['quantity_sold'].sum()))
@@ -1152,6 +1235,18 @@ elif menu == "Shows & Events":
                     add_reflection(event_id, ref_cat, ref_text, flag_cust, flag_price)
                     st.success("Added")
                 refl = get_reflections(event_id)
+                # Quick delete panel
+                with st.expander("Delete reflections"):
+                    if not refl.empty:
+                        for _, rr in refl.iterrows():
+                            colr1, colr2 = st.columns([4,1])
+                            with colr1:
+                                st.write(f"{rr['category']} | {rr['created_at'][:10]}: {rr['content'][:80]}...")
+                            with colr2:
+                                if st.button("Delete", key=f"refdel_{rr['id']}"):
+                                    delete_reflection(int(rr['id']))
+                                    st.success("Deleted")
+                                    st.experimental_rerun()
                 if not refl.empty:
                     st.subheader("Previous Reflections")
                     f1, f2, f3 = st.columns(3)
