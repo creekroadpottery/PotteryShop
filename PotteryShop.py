@@ -1681,16 +1681,16 @@ st.set_page_config(page_title="Pottery Shop & Events", page_icon="🧱", layout=
 init_db()
 
 menu = st.sidebar.selectbox("Go to", [
-    "📅 New Event",
-    "🎯 Smart Planning", 
-    "📋 Manage Events",
-    "📊 Event Analytics",
-    "🏠 Dashboard",
-    "🏺 Items",
-    "➕ New Item",
-    "📈 Business Goals",
-    "📆 Yearly Review",
-    "💾 Import/Export"
+"New Event",
+"Shows & Events",
+"Event Analytics",
+"Smart Planning",
+"Business Goals",
+"Yearly Dashboard",
+"Dashboard",
+"Items",
+"New item",
+"Import or Export"
 ]) 
 
 # Existing menu items (simplified for space)
