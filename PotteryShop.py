@@ -955,10 +955,15 @@ def event_management():
             with col_del1:
                 confirm_delete = st.checkbox("I understand this cannot be undone")
             with col_del2:
-                if st.button("Delete Event", type="secondary") and confirm_delete:
+                delete_clicked = st.button("Delete Event", type="secondary")
+                
+            if delete_clicked:
+                if confirm_delete:
                     delete_event(event_id)
                     st.success("Event deleted")
                     st.rerun()
+                else:
+                    st.error("Please check the confirmation box first")
         
         # Inventory management for this event
         st.subheader("Event Inventory")
