@@ -501,11 +501,17 @@ def about_section():
     st.markdown("""
     ### Strategic Planning for Creative Entrepreneurs
     
-    Maker Strategy Pro is designed specifically for artists, craftspeople, and creative entrepreneurs who want to grow their business strategically while staying true to their artistic vision.
+    Maker Strategy Pro was designed by:
+    
+    Alford Wayman of Creek Road Pottery LLC
+    917 Creek Road Laceyville, PA 18623
+    www.creekroadpottery.com
+    
+    Maker Strategy Pro was designed specifically for artists, craftspeople, and creative entrepreneurs who want to grow their business strategically while staying true to their artistic vision.
     
     **Why Strategy Matters for Artists:**
     
-    Many talented artists struggle with the business side of their craft. They're excellent at creating beautiful work but find themselves asking:
+    Many talented artists struggle with the business side of their craft. They're excellent at creating beautiful work, but find themselves asking:
     - "How do I price my work appropriately?"
     - "Which events should I prioritize?"
     - "What should I make more of, and what should I stop making?"
@@ -1358,7 +1364,7 @@ except Exception as e:
 st.markdown("""
 <div class="main-header">
     <h1>Maker Strategy Pro</h1>
-    <p>Strategic planning and business insights for artists</p>
+    <p>Strategic planning and business insights for artists.</p>
 </div>
 """, unsafe_allow_html=True)
 
