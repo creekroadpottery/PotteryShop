@@ -253,15 +253,39 @@ def delete_event(event_id):
     try:
         with closing(get_conn()) as conn:
             cur = conn.cursor()
+            
+            # Check if event exists first
+            cur.execute("SELECT COUNT(*) FROM events WHERE id = ?", (event_id,))
+            event_exists = cur.fetchone()[0]
+            
+            if event_exists == 0:
+                st.error(f"Event with ID {event_id} not found")
+                return False
+            
             # Delete all related records first (foreign key constraints)
             cur.execute("DELETE FROM event_inventory WHERE event_id = ?", (event_id,))
+            deleted_inventory = cur.rowcount
+            
             cur.execute("DELETE FROM event_reflections WHERE event_id = ?", (event_id,))
+            deleted_reflections = cur.rowcount
+            
             cur.execute("DELETE FROM event_environment WHERE event_id = ?", (event_id,))
+            deleted_environment = cur.rowcount
+            
             # Finally delete the event itself
             cur.execute("DELETE FROM events WHERE id = ?", (event_id,))
+            deleted_events = cur.rowcount
+            
             conn.commit()
+            
+            # Show what was deleted
+            st.info(f"Deleted: {deleted_events} event, {deleted_inventory} inventory items, {deleted_reflections} reflections, {deleted_environment} environment records")
+            
+            return deleted_events > 0
+            
     except Exception as e:
         st.error(f"Error deleting event: {e}")
+        return False
 
 def add_event_inventory(event_id, sku, name, brought, sold, price):
     try:
@@ -959,9 +983,13 @@ def event_management():
                 
             if delete_clicked:
                 if confirm_delete:
-                    delete_event(event_id)
-                    st.success("Event deleted")
-                    st.rerun()
+                    st.info(f"Attempting to delete event ID: {event_id}")
+                    success = delete_event(event_id)
+                    if success:
+                        st.success("Event deleted successfully!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete event")
                 else:
                     st.error("Please check the confirmation box first")
         
