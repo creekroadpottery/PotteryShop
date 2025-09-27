@@ -135,23 +135,196 @@ def init_db():
             """
         )
         
-        # Neighboring vendors and environment tracking
+        # Goal tracking tables
         cur.execute(
             """
-            CREATE TABLE IF NOT EXISTS event_environment (
+            CREATE TABLE IF NOT EXISTS business_goals (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_id INTEGER NOT NULL,
-                neighboring_vendor_left TEXT,
-                neighboring_vendor_right TEXT,
-                booth_location TEXT,
-                foot_traffic_pattern TEXT,
-                customer_demographics TEXT,
-                competition_notes TEXT,
-                pricing_observations TEXT,
+                goal_name TEXT NOT NULL,
+                goal_type TEXT NOT NULL,
+                target_value REAL NOT NULL,
+                target_date DATE NOT NULL,
+                current_value REAL DEFAULT 0,
+                measurement_unit TEXT,
+                category TEXT,
+                description TEXT,
+                status TEXT DEFAULT 'active',
                 created_at TEXT,
-                FOREIGN KEY(event_id) REFERENCES events(id)
+                updated_at TEXT
             )
             """
+        )
+        
+        # Goal progress tracking
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS goal_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                progress_date DATE NOT NULL,
+                value REAL NOT NULL,
+                notes TEXT,
+                source TEXT,
+                created_at TEXT,
+                FOREIGN KEY(goal_id) REFERENCES business_goals(id)
+            )
+            """
+        )
+        
+        # Milestone tracking
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS goal_milestones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                milestone_name TEXT NOT NULL,
+                target_value REAL NOT NULL,
+                achieved_date DATE,
+                notes TEXT,
+                created_at TEXT,
+                FOREIGN KEY(goal_id) REFERENCES business_goals(id)
+            )
+            """
+        )
+        
+        conn.commit()
+
+# ---------- Goal tracking functions
+
+def create_goal(goal_data):
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow().isoformat()
+        cur.execute(
+            """
+            INSERT INTO business_goals (goal_name, goal_type, target_value, target_date,
+                                      measurement_unit, category, description, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                goal_data.get("goal_name"),
+                goal_data.get("goal_type"),
+                float(goal_data.get("target_value")),
+                goal_data.get("target_date"),
+                goal_data.get("measurement_unit"),
+                goal_data.get("category"),
+                goal_data.get("description"),
+                "active",
+                now,
+                now,
+            ),
+        )
+        goal_id = cur.lastrowid
+        conn.commit()
+        return goal_id
+
+def update_goal_progress(goal_id, value, notes="", source="manual"):
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow().isoformat()
+        today = date.today()
+        
+        # Add progress entry
+        cur.execute(
+            "INSERT INTO goal_progress (goal_id, progress_date, value, notes, source, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (goal_id, today, value, notes, source, now),
+        )
+        
+        # Update current value in goals table
+        cur.execute(
+            "UPDATE business_goals SET current_value = ?, updated_at = ? WHERE id = ?",
+            (value, now, goal_id),
+        )
+        conn.commit()
+
+def get_active_goals():
+    with closing(get_conn()) as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM business_goals WHERE status = 'active' ORDER BY target_date", conn
+        )
+
+def get_goal_progress(goal_id):
+    with closing(get_conn()) as conn:
+        return pd.read_sql_query(
+            "SELECT * FROM goal_progress WHERE goal_id = ? ORDER BY progress_date DESC", 
+            conn, params=(goal_id,)
+        )
+
+def calculate_yearly_metrics(year=None):
+    if year is None:
+        year = date.today().year
+    
+    with closing(get_conn()) as conn:
+        # Revenue for the year
+        yearly_revenue = pd.read_sql_query(
+            """
+            SELECT SUM(total_revenue) as total_revenue, COUNT(*) as total_events
+            FROM events 
+            WHERE status = 'completed' AND strftime('%Y', event_date) = ?
+            """, conn, params=(str(year),)
+        )
+        
+        # Monthly breakdown
+        monthly_breakdown = pd.read_sql_query(
+            """
+            SELECT strftime('%m', event_date) as month,
+                   SUM(total_revenue) as revenue,
+                   COUNT(*) as events
+            FROM events 
+            WHERE status = 'completed' AND strftime('%Y', event_date) = ?
+            GROUP BY strftime('%m', event_date)
+            ORDER BY month
+            """, conn, params=(str(year),)
+        )
+        
+        # Previous year comparison
+        prev_year_revenue = pd.read_sql_query(
+            """
+            SELECT SUM(total_revenue) as total_revenue, COUNT(*) as total_events
+            FROM events 
+            WHERE status = 'completed' AND strftime('%Y', event_date) = ?
+            """, conn, params=(str(year - 1),)
+        )
+        
+        return yearly_revenue, monthly_breakdown, prev_year_revenue
+
+def auto_update_goals_from_events():
+    """Automatically update revenue and event count goals based on completed events"""
+    with closing(get_conn()) as conn:
+        cur = conn.cursor()
+        now = datetime.utcnow().isoformat()
+        current_year = date.today().year
+        
+        # Get current year totals
+        cur.execute(
+            """
+            SELECT SUM(total_revenue) as total_revenue, COUNT(*) as total_events
+            FROM events 
+            WHERE status = 'completed' AND strftime('%Y', event_date) = ?
+            """, (str(current_year),)
+        )
+        result = cur.fetchone()
+        total_revenue = result[0] or 0
+        total_events = result[1] or 0
+        
+        # Update revenue goals
+        cur.execute(
+            """
+            UPDATE business_goals 
+            SET current_value = ?, updated_at = ?
+            WHERE goal_type = 'revenue' AND status = 'active' 
+            AND strftime('%Y', target_date) = ?
+            """, (total_revenue, now, str(current_year))
+        )
+        
+        # Update event count goals
+        cur.execute(
+            """
+            UPDATE business_goals 
+            SET current_value = ?, updated_at = ?
+            WHERE goal_type = 'events' AND status = 'active' 
+            AND strftime('%Y', target_date) = ?
+            """, (total_events, now, str(current_year))
         )
         
         conn.commit()
@@ -916,7 +1089,242 @@ def event_reflections_manager(event_id):
         if filtered_reflections.empty and not reflections_df.empty:
             st.info("No reflections match your current filters.")
 
-def analytics_dashboard():
+def goals_manager():
+    st.header("🎯 Business Goals & Growth Tracking")
+    
+    # Auto-update goals from events
+    auto_update_goals_from_events()
+    
+    # Current goals overview
+    active_goals = get_active_goals()
+    
+    if not active_goals.empty:
+        st.subheader("📊 Goal Progress Overview")
+        
+        for _, goal in active_goals.iterrows():
+            progress_percentage = (goal['current_value'] / goal['target_value']) * 100 if goal['target_value'] > 0 else 0
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.write(f"**{goal['goal_name']}**")
+                st.caption(f"{goal['category']}")
+            with col2:
+                st.metric(
+                    f"Progress", 
+                    f"{goal['current_value']:.0f} / {goal['target_value']:.0f} {goal['measurement_unit']}"
+                )
+            with col3:
+                st.progress(min(progress_percentage / 100, 1.0))
+                st.write(f"{progress_percentage:.1f}% complete")
+            with col4:
+                days_remaining = (datetime.strptime(goal['target_date'], '%Y-%m-%d').date() - date.today()).days
+                if days_remaining > 0:
+                    st.write(f"⏰ {days_remaining} days left")
+                elif days_remaining == 0:
+                    st.write("🎯 Due today!")
+                else:
+                    st.write(f"⚠️ {abs(days_remaining)} days overdue")
+        
+        st.divider()
+    
+    # Add new goal
+    with st.expander("➕ Create New Goal", expanded=len(active_goals) == 0):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            goal_name = st.text_input("Goal Name", help="e.g., 'Annual Revenue Target', 'Number of Shows'")
+            goal_type = st.selectbox("Goal Type", 
+                                   ["revenue", "events", "social_media", "custom"],
+                                   format_func=lambda x: {
+                                       "revenue": "Revenue ($)",
+                                       "events": "Number of Events",
+                                       "social_media": "Social Media Growth",
+                                       "custom": "Custom Metric"
+                                   }[x])
+            
+            target_value = st.number_input("Target Value", min_value=0.0, step=1.0)
+            
+        with col2:
+            target_date = st.date_input("Target Date", value=date(date.today().year, 12, 31))
+            
+            category = st.selectbox("Category", 
+                                  ["Annual Goals", "Quarterly Goals", "Monthly Goals", "Growth Targets", "Other"])
+            
+            measurement_unit = st.text_input("Unit", 
+                                           value={
+                                               "revenue": "$",
+                                               "events": "events",
+                                               "social_media": "followers",
+                                               "custom": "units"
+                                           }.get(goal_type, "units"))
+        
+        description = st.text_area("Description", help="What does success look like? Why is this goal important?")
+        
+        if st.button("Create Goal", type="primary"):
+            if goal_name and target_value > 0:
+                goal_data = {
+                    "goal_name": goal_name,
+                    "goal_type": goal_type,
+                    "target_value": target_value,
+                    "target_date": target_date,
+                    "measurement_unit": measurement_unit,
+                    "category": category,
+                    "description": description,
+                }
+                goal_id = create_goal(goal_data)
+                st.success(f"Goal created! ID: {goal_id}")
+                st.experimental_rerun()
+            else:
+                st.error("Please fill in goal name and target value")
+    
+    # Manual progress update
+    if not active_goals.empty:
+        st.subheader("📈 Update Goal Progress")
+        
+        goal_options = [f"{row['goal_name']} (Current: {row['current_value']:.0f})" for _, row in active_goals.iterrows()]
+        selected_goal_index = st.selectbox("Select Goal to Update", range(len(goal_options)), 
+                                         format_func=lambda x: goal_options[x])
+        
+        selected_goal = active_goals.iloc[selected_goal_index]
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_value = st.number_input("New Value", 
+                                      min_value=0.0, 
+                                      value=float(selected_goal['current_value']),
+                                      step=1.0)
+        with col2:
+            progress_notes = st.text_input("Notes (optional)", 
+                                         help="What contributed to this progress?")
+        
+        if st.button("Update Progress"):
+            update_goal_progress(selected_goal['id'], new_value, progress_notes)
+            st.success("Progress updated!")
+            st.experimental_rerun()
+
+def yearly_dashboard():
+    st.header("📈 Annual Business Dashboard")
+    
+    # Year selector
+    current_year = date.today().year
+    selected_year = st.selectbox("Select Year", [current_year, current_year - 1, current_year - 2], index=0)
+    
+    yearly_revenue, monthly_breakdown, prev_year_revenue = calculate_yearly_metrics(selected_year)
+    
+    # High-level metrics
+    if not yearly_revenue.empty:
+        total_revenue = yearly_revenue.iloc[0]['total_revenue'] or 0
+        total_events = yearly_revenue.iloc[0]['total_events'] or 0
+        avg_per_event = total_revenue / max(total_events, 1)
+        
+        # Previous year comparison
+        prev_revenue = 0
+        prev_events = 0
+        if not prev_year_revenue.empty:
+            prev_revenue = prev_year_revenue.iloc[0]['total_revenue'] or 0
+            prev_events = prev_year_revenue.iloc[0]['total_events'] or 0
+        
+        revenue_growth = ((total_revenue - prev_revenue) / max(prev_revenue, 1)) * 100
+        events_growth = ((total_events - prev_events) / max(prev_events, 1)) * 100
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Revenue", f"${total_revenue:.2f}", 
+                     delta=f"{revenue_growth:+.1f}%" if prev_revenue > 0 else None)
+        with col2:
+            st.metric("Total Events", int(total_events),
+                     delta=f"{events_growth:+.1f}%" if prev_events > 0 else None)
+        with col3:
+            st.metric("Avg per Event", f"${avg_per_event:.2f}")
+        with col4:
+            # Goal progress (if exists)
+            active_goals = get_active_goals()
+            revenue_goals = active_goals[
+                (active_goals['goal_type'] == 'revenue') & 
+                (active_goals['target_date'].str.startswith(str(selected_year)))
+            ]
+            if not revenue_goals.empty:
+                goal = revenue_goals.iloc[0]
+                goal_progress = (total_revenue / goal['target_value']) * 100
+                st.metric("Goal Progress", f"{goal_progress:.1f}%",
+                         delta=f"${total_revenue - goal['target_value']:.0f} to go" if goal_progress < 100 else "Goal achieved!")
+    
+    # Monthly breakdown
+    if not monthly_breakdown.empty:
+        st.subheader(f"📅 {selected_year} Monthly Breakdown")
+        
+        # Add month names
+        month_names = {
+            '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
+            '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug',
+            '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
+        }
+        monthly_breakdown['month_name'] = monthly_breakdown['month'].map(month_names)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = px.bar(monthly_breakdown, x='month_name', y='revenue',
+                        title=f"{selected_year} Revenue by Month")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = px.line(monthly_breakdown, x='month_name', y='revenue',
+                         title=f"{selected_year} Revenue Trend")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.dataframe(monthly_breakdown[['month_name', 'revenue', 'events']], use_container_width=True)
+    
+    # Year-over-year comparison
+    if prev_revenue > 0:
+        st.subheader("📊 Year-over-Year Comparison")
+        
+        comparison_data = pd.DataFrame({
+            'Year': [selected_year - 1, selected_year],
+            'Revenue': [prev_revenue, total_revenue],
+            'Events': [prev_events, total_events]
+        })
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = px.bar(comparison_data, x='Year', y='Revenue',
+                        title="Revenue Comparison")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = px.bar(comparison_data, x='Year', y='Events',
+                        title="Events Comparison")
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Growth insights
+        if revenue_growth > 0:
+            st.success(f"🎉 **Revenue Growth:** Up {revenue_growth:.1f}% from last year (${total_revenue - prev_revenue:,.2f} increase)")
+        elif revenue_growth < 0:
+            st.warning(f"📉 **Revenue Decline:** Down {abs(revenue_growth):.1f}% from last year")
+        else:
+            st.info("📊 **Revenue Stable:** Same as last year")
+    
+    # Goals progress for selected year
+    year_goals = active_goals[active_goals['target_date'].str.startswith(str(selected_year))] if not active_goals.empty else pd.DataFrame()
+    
+    if not year_goals.empty:
+        st.subheader(f"🎯 {selected_year} Goals Progress")
+        
+        for _, goal in year_goals.iterrows():
+            progress_percentage = (goal['current_value'] / goal['target_value']) * 100
+            
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.write(f"**{goal['goal_name']}**")
+                st.progress(min(progress_percentage / 100, 1.0))
+            with col2:
+                st.metric("Progress", f"{goal['current_value']:.0f} / {goal['target_value']:.0f}")
+            with col3:
+                if progress_percentage >= 100:
+                    st.success("🎉 Achieved!")
+                elif progress_percentage >= 75:
+                    st.info(f"{progress_percentage:.1f}% - Almost there!")
+                else:
+                    st.write(f"{progress_percentage:.1f}% complete")
     st.header("🚀 Strategic Business Intelligence")
     
     revenue_by_type, monthly_trends, top_items, theme_performance, promotion_effectiveness, price_analysis, seasonal_analysis, make_more_less = calculate_event_metrics()
@@ -1181,26 +1589,72 @@ menu = st.sidebar.selectbox("Go to", [
     "Shows & Events",
     "New Event",
     "Event Analytics",
-    "Smart Planning"
+    "Smart Planning",
+    "Business Goals",
+    "Yearly Dashboard"
 ]) 
 
 # Existing menu items (simplified for space)
 if menu == "Dashboard":
-    st.header("Pottery Shop")
-    st.write("Simple inventory for potters. Track items, stock movements, and show performance.")
+    st.header("Pottery Shop & Business Intelligence")
+    st.write("Complete pottery business management: inventory, shows, strategy, and growth tracking.")
     
-    # Quick stats
+    # Quick stats with goal integration
     events_df = get_events()
+    current_year = date.today().year
+    
+    col1, col2, col3 = st.columns(3)
+    
     if not events_df.empty:
         completed_events = events_df[events_df['status'] == 'completed']
-        if not completed_events.empty:
-            col1, col2, col3 = st.columns(3)
+        current_year_events = completed_events[
+            pd.to_datetime(completed_events['event_date']).dt.year == current_year
+        ]
+        
+        if not current_year_events.empty:
             with col1:
-                st.metric("Total Shows", len(completed_events))
+                st.metric("This Year's Shows", len(current_year_events))
             with col2:
-                st.metric("Total Revenue", f"${completed_events['total_revenue'].sum():.2f}")
+                st.metric("This Year's Revenue", f"${current_year_events['total_revenue'].sum():.2f}")
             with col3:
-                st.metric("Average per Show", f"${completed_events['total_revenue'].mean():.2f}")
+                st.metric("Average per Show", f"${current_year_events['total_revenue'].mean():.2f}")
+    
+    # Goal progress overview
+    auto_update_goals_from_events()
+    active_goals = get_active_goals()
+    
+    if not active_goals.empty:
+        st.subheader("🎯 Goal Progress Summary")
+        
+        current_year_goals = active_goals[active_goals['target_date'].str.startswith(str(current_year))]
+        
+        if not current_year_goals.empty:
+            for _, goal in current_year_goals.head(3).iterrows():  # Show top 3 goals
+                progress_percentage = (goal['current_value'] / goal['target_value']) * 100 if goal['target_value'] > 0 else 0
+                
+                col1, col2, col3 = st.columns([2, 1, 1])
+                with col1:
+                    st.write(f"**{goal['goal_name']}**")
+                    st.progress(min(progress_percentage / 100, 1.0))
+                with col2:
+                    st.write(f"{goal['current_value']:.0f} / {goal['target_value']:.0f}")
+                with col3:
+                    if progress_percentage >= 100:
+                        st.success("🎉 Done!")
+                    else:
+                        st.write(f"{progress_percentage:.1f}%")
+        
+        if len(active_goals) > 3:
+            st.info(f"View all {len(active_goals)} goals in Business Goals section")
+    else:
+        st.info("💡 Set up your first business goal to track progress throughout the year!")
+    
+    # Recent items summary
+    df = fetch_items_df()
+    if not df.empty:
+        top = df[["sku", "name", "qty_on_hand", "price", "category", "glaze", "updated_at"]].head(10)
+        st.subheader("Recent Items")
+        st.dataframe(top, use_container_width=True)
 
 elif menu == "Shows & Events":
     st.header("Shows & Events")
@@ -1382,6 +1836,12 @@ elif menu == "Smart Planning":
         st.info(f"No historical data for {upcoming_event_type} events yet.")
 
 # Add other existing menu items here (Items, New item, etc.)
+elif menu == "Business Goals":
+    goals_manager()
+
+elif menu == "Yearly Dashboard":
+    yearly_dashboard()
+
 elif menu == "Items":
     st.header("Items")
     q = st.text_input("Search by name, sku, category, glaze, clay body")
