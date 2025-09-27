@@ -1130,10 +1130,13 @@ elif menu == "Dashboard":
     
     # Recent reflections
     recent_reflections = get_reflections().head(3)
-    if not recent_reflections.empty:
-        st.markdown("**Recent Reflections:**")
-        for _, reflection in recent_reflections.iterrows():
-        with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
+    if not refl.empty:
+    st.subheader("Previous Reflections")
+    for _, reflection in refl.iterrows():
+        # Note: Using 'category' since 'event_name' doesn't exist in the reflections table
+        with st.expander(f"{reflection['category']} - {reflection['created_at'][:10]}"):
+            st.write(reflection['content'])
+            # Add any additional reflection details here
 
 elif menu == "Dashboard":
     st.header("Overview Dashboard")
