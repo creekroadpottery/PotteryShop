@@ -952,7 +952,12 @@ def event_management():
     if selected_event:
         event_idx = event_options.index(selected_event)
         event = events_df.iloc[event_idx]
-        event_id = event['id']
+        event_id = int(event['id'])  # Ensure it's an integer
+        
+        # Debug: show what we found
+        st.write(f"Debug - Selected event: {selected_event}")
+        st.write(f"Debug - Event ID from database: {event_id}")
+        st.write(f"Debug - Event data: {event['name']} - {event['event_date']}")
         
         st.subheader(f"Managing: {event['name']}")
         
@@ -971,6 +976,10 @@ def event_management():
                 st.write(f"**Revenue:** ${event['total_revenue']:.2f}")
                 profit = event['total_revenue'] - event['booth_fee']
                 st.write(f"**Profit:** ${profit:.2f}")
+        
+        # Show all events for debugging
+        with st.expander("Debug - All Events in Database"):
+            st.dataframe(events_df[['id', 'name', 'event_date', 'status']])
         
         # Delete event option
         with st.expander("Danger Zone", expanded=False):
