@@ -227,6 +227,36 @@ def create_event(event_data):
         st.error(f"Error creating event: {e}")
         return None
 
+def update_event(event_id, event_data):
+    try:
+        with closing(get_conn()) as conn:
+            cur = conn.cursor()
+            now = datetime.utcnow().isoformat()
+            cur.execute("""
+                UPDATE events SET
+                    name = ?, event_date = ?, location = ?, event_type = ?, theme = ?,
+                    theme_description = ?, change_goal = ?, color_palette = ?, target_customer = ?,
+                    price_strategy = ?, booth_fee = ?, setup_time = ?, weather = ?, foot_traffic = ?,
+                    total_revenue = ?, cash_sales = ?, card_sales = ?, check_sales = ?,
+                    discounts_given = ?, rewards_given = ?, status = ?, updated_at = ?
+                WHERE id = ?
+            """, (safe_string(event_data.get("name")), str(event_data.get("event_date", "")),
+                  safe_string(event_data.get("location")), safe_string(event_data.get("event_type")),
+                  safe_string(event_data.get("theme")), safe_string(event_data.get("theme_description")),
+                  safe_string(event_data.get("change_goal")), safe_string(event_data.get("color_palette")),
+                  safe_string(event_data.get("target_customer")), safe_string(event_data.get("price_strategy")),
+                  safe_float(event_data.get("booth_fee")), safe_string(event_data.get("setup_time")),
+                  safe_string(event_data.get("weather")), safe_string(event_data.get("foot_traffic")),
+                  safe_float(event_data.get("total_revenue")), safe_float(event_data.get("cash_sales")),
+                  safe_float(event_data.get("card_sales")), safe_float(event_data.get("check_sales")),
+                  safe_float(event_data.get("discounts_given")), safe_float(event_data.get("rewards_given")),
+                  safe_string(event_data.get("status", "planned")), now, safe_int(event_id)))
+            conn.commit()
+            return True
+    except Exception as e:
+        st.error(f"Error updating event: {e}")
+        return False
+        
 def get_events():
     try:
         with closing(get_conn()) as conn:
@@ -754,22 +784,58 @@ def strategic_event_planning():
     st.header("Strategic Event Planning")
     st.markdown("*Plan your creative vision and business strategy*")
     
+    # Option to edit existing event
+    events_df = get_events()
+    edit_mode = False
+    existing_event = None
+    
+    if not events_df.empty:
+        with st.expander("Edit Existing Event", expanded=False):
+            event_options = ["Create New Event"] + [f"{row['name']} - {row['event_date']}" for _, row in events_df.iterrows()]
+            selected_option = st.selectbox("Select Event", event_options)
+            
+            if selected_option != "Create New Event":
+                edit_mode = True
+                event_idx = event_options.index(selected_option) - 1
+                existing_event = events_df.iloc[event_idx]
+                st.info(f"Editing: {existing_event['name']}")
+    
+    # Pre-fill values if editing
+    default_name = existing_event['name'] if edit_mode else ""
+    default_date = pd.to_datetime(existing_event['event_date']).date() if edit_mode else date.today()
+    default_location = existing_event['location'] if edit_mode else ""
+    default_event_type = existing_event['event_type'] if edit_mode else "Art Fair"
+    default_booth_fee = float(existing_event['booth_fee']) if edit_mode else 0.0
+    default_setup_time = existing_event['setup_time'] if edit_mode else ""
+    default_theme_name = existing_event['theme'] if edit_mode else ""
+    default_theme_desc = existing_event['theme_description'] if edit_mode else ""
+    default_change_goal = existing_event['change_goal'] if edit_mode else ""
+    default_color_palette = existing_event['color_palette'] if edit_mode else ""
+    default_target_customer = existing_event['target_customer'] if edit_mode else ""
+    default_price_strategy = existing_event['price_strategy'] if edit_mode else ""
+    default_weather = existing_event['weather'] if edit_mode else ""
+    default_foot_traffic = existing_event['foot_traffic'] if edit_mode and existing_event['foot_traffic'] else "Moderate"
+    default_total_revenue = float(existing_event['total_revenue']) if edit_mode else 0.0
+    default_cash_sales = float(existing_event['cash_sales']) if edit_mode else 0.0
+    default_card_sales = float(existing_event['card_sales']) if edit_mode else 0.0
+    default_status = existing_event['status'] if edit_mode else "planned"
+    
     # Basic event details
     st.subheader("Event Information")
     col1, col2 = st.columns(2)
     
     with col1:
-        name = st.text_input("Event Name")
-        event_date = st.date_input("Event Date")
-        location = st.text_input("Location")
-        event_type = st.selectbox("Event Type", [
-            "Art Fair", "Farmers Market", "Studio Sale", "Gallery Show", 
-            "Holiday Market", "Pop-up Shop", "Commission Show", "Online Sale", "Other"
-        ])
+        name = st.text_input("Event Name", value=default_name)
+        event_date = st.date_input("Event Date", value=default_date)
+        location = st.text_input("Location", value=default_location)
+        event_type_options = ["Art Fair", "Farmers Market", "Studio Sale", "Gallery Show", 
+                              "Holiday Market", "Pop-up Shop", "Commission Show", "Online Sale", "Other"]
+        event_type_idx = event_type_options.index(default_event_type) if default_event_type in event_type_options else 0
+        event_type = st.selectbox("Event Type", event_type_options, index=event_type_idx)
     
     with col2:
-        booth_fee = st.number_input("Booth Fee ($)", min_value=0.0, step=25.0)
-        setup_time = st.text_input("Setup Time")
+        booth_fee = st.number_input("Booth Fee ($)", min_value=0.0, step=25.0, value=default_booth_fee)
+        setup_time = st.text_input("Setup Time", value=default_setup_time)
         expected_attendance = st.selectbox("Expected Attendance", [
             "Small (< 100)", "Medium (100-500)", "Large (500-1000)", "Very Large (1000+)"
         ])
@@ -778,6 +844,7 @@ def strategic_event_planning():
     # THE KEY QUESTION
     st.subheader("Strategic Intent")
     change_goal = st.text_area("What change are you trying to make?", 
+                              value=default_change_goal,
                               placeholder="What do you want to achieve with this event? How does it fit your artistic/business growth? What change in your practice, customer base, or market position are you working toward?",
                               height=100)
     
@@ -786,39 +853,47 @@ def strategic_event_planning():
     col3, col4 = st.columns(2)
     
     with col3:
-        theme_name = st.text_input("Collection/Theme Name")
+        theme_name = st.text_input("Collection/Theme Name", value=default_theme_name)
         theme_description = st.text_area("Theme Description", 
+                                        value=default_theme_desc,
                                         placeholder="Describe the creative vision, story, or concept behind this collection...")
         color_palette = st.text_area("Color Palette & Glazes", 
+                                    value=default_color_palette,
                                     placeholder="Specific glazes, color combinations, visual mood...")
     
     with col4:
         target_customer = st.text_area("Target Customer", 
+                                      value=default_target_customer,
                                       placeholder="Who is your ideal customer for this event? What are they looking for?")
         price_strategy = st.text_area("Pricing Strategy", 
+                                     value=default_price_strategy,
                                      placeholder="How will you price for this audience and venue? Any special considerations?")
         unique_value = st.text_area("What Makes Your Work Special?", 
                                    placeholder="What sets your pottery apart? Why should customers choose your work?")
     
     # Event completion tracking
-    completed = st.checkbox("Event completed - add results")
+    completed = st.checkbox("Event completed - add results", value=(default_status == "completed"))
     
     if completed:
         st.subheader("Event Results")
         col5, col6 = st.columns(2)
         
         with col5:
-            total_revenue = st.number_input("Total Revenue ($)", min_value=0.0, step=0.01)
-            cash_sales = st.number_input("Cash Sales ($)", min_value=0.0, step=0.01)
-            card_sales = st.number_input("Card Sales ($)", min_value=0.0, step=0.01)
+            total_revenue = st.number_input("Total Revenue ($)", min_value=0.0, step=0.01, value=default_total_revenue)
+            cash_sales = st.number_input("Cash Sales ($)", min_value=0.0, step=0.01, value=default_cash_sales)
+            card_sales = st.number_input("Card Sales ($)", min_value=0.0, step=0.01, value=default_card_sales)
             
         with col6:
-            weather_actual = st.text_input("Actual Weather")
-            foot_traffic = st.selectbox("Foot Traffic", ["Light", "Moderate", "Heavy", "Excellent"])
+            weather_actual = st.text_input("Actual Weather", value=default_weather)
+            foot_traffic_options = ["Light", "Moderate", "Heavy", "Excellent"]
+            foot_traffic_idx = foot_traffic_options.index(default_foot_traffic) if default_foot_traffic in foot_traffic_options else 1
+            foot_traffic = st.selectbox("Foot Traffic", foot_traffic_options, index=foot_traffic_idx)
             change_achieved = st.text_area("Did you achieve the change you were seeking?", 
                                          placeholder="Reflect on whether you made progress toward your change goal...")
     
-    if st.button("Save Event Plan", type="primary"):
+    # Save button changes based on edit mode
+    button_label = "Update Event" if edit_mode else "Save Event Plan"
+    if st.button(button_label, type="primary"):
         if not name:
             st.error("Please enter an event name")
             return None
@@ -834,13 +909,22 @@ def strategic_event_planning():
             "status": "completed" if completed else "planned"
         }
         
-        event_id = create_event(event_data)
-        if event_id:
-            st.success(f"Event plan saved successfully (ID: {event_id})")
-            if completed and change_achieved:
-                # Save the change reflection
-                add_reflection(event_id, "Change Achievement", change_achieved, False, False)
-            return event_id
+        if edit_mode:
+            # Update existing event
+            success = update_event(existing_event['id'], event_data)
+            if success:
+                st.success(f"Event '{name}' updated successfully!")
+                if completed and change_achieved:
+                    add_reflection(existing_event['id'], "Change Achievement", change_achieved, False, False)
+                st.rerun()
+        else:
+            # Create new event
+            event_id = create_event(event_data)
+            if event_id:
+                st.success(f"Event plan saved successfully (ID: {event_id})")
+                if completed and change_achieved:
+                    add_reflection(event_id, "Change Achievement", change_achieved, False, False)
+                return event_id
     
     return None
 
