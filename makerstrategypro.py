@@ -1204,34 +1204,4 @@ elif menu == "Help":
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Maker Strategy Pro")
 st.sidebar.markdown("*Strategic planning and business insights for artists*")
-st.sidebar.markdown("Focus on your craft, grow your business")    # Recent reflections
-    recent_reflections = get_reflections().head(3)
-    if not recent_reflections.empty:
-        st.markdown("**Recent Reflections:**")
-        for _, reflection in recent_reflections.iterrows():
-            with st.expander(f"{reflection['event_name']} - {reflection['category']}"):
-                st.write(reflection['content'][:200] + "..." if len(reflection['content']) > 200 else reflection['content'])
-
-elif menu == "Event Reflection Journal":
-    reflection_journal()
-
-elif menu == "Business Insights":
-    business_insights_dashboard()
-
-elif menu == "Event Management":
-    event_management()
-
-elif menu == "Inventory Management":
-    inventory_management()
-
-elif menu == "About":
-    about_section()
-
-elif menu == "Help":
-    help_section()
-
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Maker Strategy Pro")
-st.sidebar.markdown("*Strategic planning and business insights for artists*")
 st.sidebar.markdown("Focus on your craft, grow your business")
