@@ -12,17 +12,6 @@ def get_client() -> Client:
     key = st.secrets["supabase"]["key"]
     return create_client(url, key)
 
-def init_db():
-    """Verify connection works - tables are created in Supabase dashboard."""
-    try:
-        sb = get_client()
-        sb.table("events").select("id").limit(1).execute()
-    except Exception as e:
-        if "does not exist" in str(e):
-            st.error("Tables not found in Supabase. Please run the SQL setup script.")
-        else:
-            raise e
-
 # =============== HELPER FUNCTIONS ===============
 
 def safe_string(value, default=""):
@@ -50,6 +39,90 @@ def to_df(data) -> pd.DataFrame:
         return pd.DataFrame()
     return pd.DataFrame(data)
 
+def uid():
+    """Get current user's ID."""
+    return st.session_state.user.id
+
+# =============== AUTHENTICATION ===============
+
+def login_page():
+    st.markdown("""
+    <div class="main-header">
+        <h1>🏺 Maker Strategy Pro</h1>
+        <p>Strategic planning and business insights for artists.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    tab1, tab2 = st.tabs(["Sign In", "Create Account"])
+
+    with tab1:
+        st.subheader("Welcome back!")
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
+
+        if st.button("Sign In", type="primary", key="signin_btn"):
+            if not email or not password:
+                st.error("Please enter your email and password.")
+            else:
+                try:
+                    sb = get_client()
+                    response = sb.auth.sign_in_with_password({
+                        "email": email,
+                        "password": password
+                    })
+                    st.session_state.user = response.user
+                    st.session_state.session = response.session
+                    st.success("Signed in successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error("Invalid email or password. Please try again.")
+
+    with tab2:
+        st.subheader("Create your free account")
+        new_email = st.text_input("Email", key="signup_email")
+        new_password = st.text_input("Password (min 6 characters)", 
+                                     type="password", key="signup_password")
+        confirm_password = st.text_input("Confirm Password", 
+                                         type="password", key="confirm_password")
+
+        if st.button("Create Account", type="primary", key="signup_btn"):
+            if not new_email or not new_password:
+                st.error("Please fill in all fields.")
+            elif len(new_password) < 6:
+                st.error("Password must be at least 6 characters.")
+            elif new_password != confirm_password:
+                st.error("Passwords do not match.")
+            else:
+                try:
+                    sb = get_client()
+                    response = sb.auth.sign_up({
+                        "email": new_email,
+                        "password": new_password
+                    })
+                    st.session_state.user = response.user
+                    st.session_state.session = response.session
+                    st.success("Account created! Welcome to Maker Strategy Pro!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Could not create account: {e}")
+
+def logout():
+    try:
+        sb = get_client()
+        sb.auth.sign_out()
+    except:
+        pass
+    st.session_state.user = None
+    st.session_state.session = None
+    st.rerun()
+
+def check_auth():
+    """Returns True if user is logged in."""
+    if "user" not in st.session_state:
+        st.session_state.user = None
+        st.session_state.session = None
+    return st.session_state.user is not None
+
 # =============== ITEM FUNCTIONS ===============
 
 def upsert_item(row: dict):
@@ -69,10 +142,13 @@ def upsert_item(row: dict):
             "notes": safe_string(row.get("notes")),
             "image_path": safe_string(row.get("image_path")),
             "updated_at": now,
+            "user_id": uid(),
         }
-        existing = sb.table("items").select("id").eq("sku", payload["sku"]).execute()
+        existing = sb.table("items").select("id") \
+            .eq("sku", payload["sku"]).eq("user_id", uid()).execute()
         if existing.data:
-            sb.table("items").update(payload).eq("sku", payload["sku"]).execute()
+            sb.table("items").update(payload).eq("sku", payload["sku"]) \
+                .eq("user_id", uid()).execute()
         else:
             payload["created_at"] = now
             sb.table("items").insert(payload).execute()
@@ -84,15 +160,18 @@ def fetch_items_df(search: str = "") -> pd.DataFrame:
         sb = get_client()
         if search:
             q = safe_string(search).strip()
-            result = sb.table("items").select("*").ilike("name", f"%{q}%").execute()
+            result = sb.table("items").select("*") \
+                .eq("user_id", uid()).ilike("name", f"%{q}%").execute()
             df = to_df(result.data)
             for field in ["sku", "category", "glaze", "clay_body"]:
-                r2 = sb.table("items").select("*").ilike(field, f"%{q}%").execute()
+                r2 = sb.table("items").select("*") \
+                    .eq("user_id", uid()).ilike(field, f"%{q}%").execute()
                 if r2.data:
                     df = pd.concat([df, to_df(r2.data)]).drop_duplicates(subset="id")
             return df
         else:
-            result = sb.table("items").select("*").order("updated_at", desc=True).execute()
+            result = sb.table("items").select("*") \
+                .eq("user_id", uid()).order("updated_at", desc=True).execute()
             return to_df(result.data)
     except Exception as e:
         st.error(f"Database error: {e}")
@@ -101,8 +180,8 @@ def fetch_items_df(search: str = "") -> pd.DataFrame:
 def delete_item(item_id):
     try:
         sb = get_client()
-        sb.table("stock_moves").delete().eq("item_id", item_id).execute()
-        sb.table("items").delete().eq("id", item_id).execute()
+        sb.table("stock_moves").delete().eq("item_id", item_id).eq("user_id", uid()).execute()
+        sb.table("items").delete().eq("id", item_id).eq("user_id", uid()).execute()
     except Exception as e:
         st.error(f"Error deleting item: {e}")
 
@@ -115,12 +194,15 @@ def record_move(item_id: int, move_type: str, quantity: float, reference: str = 
             "move_type": safe_string(move_type),
             "quantity": safe_float(quantity),
             "reference": safe_string(reference),
-            "moved_at": now
+            "moved_at": now,
+            "user_id": uid(),
         }).execute()
-        item = sb.table("items").select("qty_on_hand").eq("id", item_id).execute()
+        item = sb.table("items").select("qty_on_hand") \
+            .eq("id", item_id).eq("user_id", uid()).execute()
         if item.data:
             new_qty = safe_float(item.data[0]["qty_on_hand"]) + safe_float(quantity)
-            sb.table("items").update({"qty_on_hand": new_qty, "updated_at": now}).eq("id", item_id).execute()
+            sb.table("items").update({"qty_on_hand": new_qty, "updated_at": now}) \
+                .eq("id", item_id).eq("user_id", uid()).execute()
     except Exception as e:
         st.error(f"Error recording move: {e}")
 
@@ -154,6 +236,7 @@ def create_event(event_data):
             "status": safe_string(event_data.get("status", "planned")),
             "created_at": now,
             "updated_at": now,
+            "user_id": uid(),
         }
         result = sb.table("events").insert(payload).execute()
         if result.data:
@@ -191,7 +274,8 @@ def update_event(event_id, event_data):
             "status": safe_string(event_data.get("status", "planned")),
             "updated_at": now,
         }
-        sb.table("events").update(payload).eq("id", safe_int(event_id)).execute()
+        sb.table("events").update(payload) \
+            .eq("id", safe_int(event_id)).eq("user_id", uid()).execute()
         return True
     except Exception as e:
         st.error(f"Error updating event: {e}")
@@ -200,7 +284,8 @@ def update_event(event_id, event_data):
 def get_events():
     try:
         sb = get_client()
-        result = sb.table("events").select("*").order("event_date", desc=True).execute()
+        result = sb.table("events").select("*") \
+            .eq("user_id", uid()).order("event_date", desc=True).execute()
         return to_df(result.data)
     except Exception as e:
         st.error(f"Error loading events: {e}")
@@ -209,10 +294,14 @@ def get_events():
 def delete_event(event_id):
     try:
         sb = get_client()
-        sb.table("event_inventory").delete().eq("event_id", event_id).execute()
-        sb.table("event_reflections").delete().eq("event_id", event_id).execute()
-        sb.table("event_environment").delete().eq("event_id", event_id).execute()
-        sb.table("events").delete().eq("id", event_id).execute()
+        sb.table("event_inventory").delete() \
+            .eq("event_id", event_id).eq("user_id", uid()).execute()
+        sb.table("event_reflections").delete() \
+            .eq("event_id", event_id).eq("user_id", uid()).execute()
+        sb.table("event_environment").delete() \
+            .eq("event_id", event_id).eq("user_id", uid()).execute()
+        sb.table("events").delete() \
+            .eq("id", event_id).eq("user_id", uid()).execute()
         return True
     except Exception as e:
         st.error(f"Error deleting event: {e}")
@@ -224,7 +313,9 @@ def add_event_inventory(event_id, sku, name, brought, sold, price):
     try:
         sb = get_client()
         existing = sb.table("event_inventory").select("id") \
-            .eq("event_id", safe_int(event_id)).eq("item_sku", safe_string(sku)).execute()
+            .eq("event_id", safe_int(event_id)) \
+            .eq("item_sku", safe_string(sku)) \
+            .eq("user_id", uid()).execute()
         payload = {
             "event_id": safe_int(event_id),
             "item_sku": safe_string(sku),
@@ -232,9 +323,11 @@ def add_event_inventory(event_id, sku, name, brought, sold, price):
             "quantity_brought": safe_int(brought),
             "quantity_sold": safe_int(sold),
             "price_at_event": safe_float(price),
+            "user_id": uid(),
         }
         if existing.data:
-            sb.table("event_inventory").update(payload).eq("id", existing.data[0]["id"]).execute()
+            sb.table("event_inventory").update(payload) \
+                .eq("id", existing.data[0]["id"]).execute()
         else:
             sb.table("event_inventory").insert(payload).execute()
     except Exception as e:
@@ -243,7 +336,8 @@ def add_event_inventory(event_id, sku, name, brought, sold, price):
 def get_event_inventory(event_id):
     try:
         sb = get_client()
-        result = sb.table("event_inventory").select("*").eq("event_id", safe_int(event_id)).execute()
+        result = sb.table("event_inventory").select("*") \
+            .eq("event_id", safe_int(event_id)).eq("user_id", uid()).execute()
         return to_df(result.data)
     except Exception as e:
         st.error(f"Error loading event inventory: {e}")
@@ -252,13 +346,15 @@ def get_event_inventory(event_id):
 def delete_event_inventory_row(inventory_id):
     try:
         sb = get_client()
-        sb.table("event_inventory").delete().eq("id", inventory_id).execute()
+        sb.table("event_inventory").delete() \
+            .eq("id", inventory_id).eq("user_id", uid()).execute()
     except Exception as e:
         st.error(f"Error deleting inventory row: {e}")
 
 # =============== REFLECTION FUNCTIONS ===============
 
-def add_reflection(event_id, category, content, customer_interaction=False, price_point_insight=False):
+def add_reflection(event_id, category, content, 
+                   customer_interaction=False, price_point_insight=False):
     try:
         sb = get_client()
         sb.table("event_reflections").insert({
@@ -268,6 +364,7 @@ def add_reflection(event_id, category, content, customer_interaction=False, pric
             "customer_interaction": int(bool(customer_interaction)),
             "price_point_insight": int(bool(price_point_insight)),
             "created_at": datetime.utcnow().isoformat(),
+            "user_id": uid(),
         }).execute()
     except Exception as e:
         st.error(f"Error adding reflection: {e}")
@@ -277,10 +374,14 @@ def get_reflections(event_id=None):
         sb = get_client()
         if event_id:
             result = sb.table("event_reflections").select("*") \
-                .eq("event_id", safe_int(event_id)).order("created_at", desc=True).execute()
+                .eq("event_id", safe_int(event_id)) \
+                .eq("user_id", uid()) \
+                .order("created_at", desc=True).execute()
             return to_df(result.data)
         else:
-            result = sb.table("event_reflections").select("*, events(name, event_date)") \
+            result = sb.table("event_reflections") \
+                .select("*, events(name, event_date)") \
+                .eq("user_id", uid()) \
                 .order("created_at", desc=True).execute()
             df = to_df(result.data)
             if not df.empty and "events" in df.columns:
@@ -297,7 +398,8 @@ def get_reflections(event_id=None):
 def delete_reflection(reflection_id):
     try:
         sb = get_client()
-        sb.table("event_reflections").delete().eq("id", reflection_id).execute()
+        sb.table("event_reflections").delete() \
+            .eq("id", reflection_id).eq("user_id", uid()).execute()
     except Exception as e:
         st.error(f"Error deleting reflection: {e}")
 
@@ -317,10 +419,13 @@ def add_environment_data(event_id, environment_data):
             "competition_notes": safe_string(environment_data.get("competition_notes")),
             "pricing_observations": safe_string(environment_data.get("pricing_observations")),
             "created_at": now,
+            "user_id": uid(),
         }
-        existing = sb.table("event_environment").select("id").eq("event_id", safe_int(event_id)).execute()
+        existing = sb.table("event_environment").select("id") \
+            .eq("event_id", safe_int(event_id)).eq("user_id", uid()).execute()
         if existing.data:
-            sb.table("event_environment").update(payload).eq("event_id", safe_int(event_id)).execute()
+            sb.table("event_environment").update(payload) \
+                .eq("event_id", safe_int(event_id)).eq("user_id", uid()).execute()
         else:
             sb.table("event_environment").insert(payload).execute()
     except Exception as e:
@@ -329,7 +434,8 @@ def add_environment_data(event_id, environment_data):
 def get_environment_data(event_id):
     try:
         sb = get_client()
-        result = sb.table("event_environment").select("*").eq("event_id", safe_int(event_id)).execute()
+        result = sb.table("event_environment").select("*") \
+            .eq("event_id", safe_int(event_id)).eq("user_id", uid()).execute()
         return result.data[0] if result.data else None
     except Exception as e:
         st.error(f"Error loading environment data: {e}")
@@ -341,8 +447,10 @@ def get_business_insights():
     insights = {}
     try:
         sb = get_client()
-        inv_df = to_df(sb.table("event_inventory").select("*").execute().data)
-        evt_df = to_df(sb.table("events").select("*").execute().data)
+        inv_df = to_df(sb.table("event_inventory").select("*")
+                       .eq("user_id", uid()).execute().data)
+        evt_df = to_df(sb.table("events").select("*")
+                       .eq("user_id", uid()).execute().data)
 
         if inv_df.empty:
             return insights
@@ -385,8 +493,10 @@ def get_business_insights():
             elif r > 0.2: return "REVIEW"
             else: return "MAKE LESS"
 
-        make_more_less["recommendation"] = make_more_less["avg_sell_through_rate"].apply(recommend)
-        insights["make_more_less"] = make_more_less.sort_values("avg_sell_through_rate", ascending=False)
+        if not make_more_less.empty:
+            make_more_less["recommendation"] = make_more_less["avg_sell_through_rate"].apply(recommend)
+            insights["make_more_less"] = make_more_less.sort_values(
+                "avg_sell_through_rate", ascending=False)
 
         if not evt_df.empty:
             completed = evt_df[evt_df["status"] == "completed"].copy()
@@ -401,21 +511,24 @@ def get_business_insights():
                     else: return "Fall"
 
                 completed["season"] = completed["month"].apply(season)
-                merged = inv_df.merge(completed[["id", "season"]], left_on="event_id", right_on="id")
+                merged = inv_df.merge(completed[["id", "season"]], 
+                                     left_on="event_id", right_on="id")
                 if not merged.empty:
                     seasonal = merged.groupby(["season", "item_name"]).agg(
                         total_sold=("quantity_sold", "sum"),
                         avg_price=("price_at_event", "mean"),
                         avg_sell_through_rate=("sell_through", "mean")
                     ).reset_index()
-                    insights["seasonal_analysis"] = seasonal[seasonal["total_sold"] > 0].sort_values(
+                    insights["seasonal_analysis"] = seasonal[
+                        seasonal["total_sold"] > 0].sort_values(
                         ["season", "total_sold"], ascending=[True, False])
 
                 for col in ["total_revenue", "booth_fee"]:
                     completed[col] = pd.to_numeric(completed[col], errors="coerce").fillna(0)
                 completed["profit"] = completed["total_revenue"] - completed["booth_fee"]
                 completed["roi"] = completed.apply(
-                    lambda r: r["total_revenue"] / r["booth_fee"] if r["booth_fee"] > 0 else None, axis=1)
+                    lambda r: r["total_revenue"] / r["booth_fee"] 
+                    if r["booth_fee"] > 0 else None, axis=1)
                 insights["event_performance"] = completed.groupby("event_type").agg(
                     total_events=("id", "count"),
                     avg_revenue=("total_revenue", "mean"),
@@ -437,7 +550,8 @@ def about_section():
     Maker Strategy Pro was designed by **Alford Wayman of Creek Road Pottery LLC**
     917 Creek Road, Laceyville, PA 18623 — www.creekroadpottery.com
 
-    At the heart of Maker Strategy Pro is one fundamental question: **"What change are you trying to make?"**
+    At the heart of Maker Strategy Pro is one fundamental question:
+    **"What change are you trying to make?"**
 
     **Key Features:**
     - 🎯 **Strategic Event Planning** — Plan events with intention
@@ -453,11 +567,12 @@ def help_section():
     st.header("Help & User Guide")
     with st.expander("Quick Start Guide", expanded=True):
         st.markdown("""
-        1. **Strategic Event Planning** — Create an event, answer "What change are you trying to make?"
-        2. **Inventory Management** — Add your pieces with SKUs and pricing
-        3. **Event Management** — Record what you brought and sold
-        4. **Event Reflection Journal** — Capture insights while fresh
-        5. **Business Insights** — Get make more/less recommendations
+        1. **Create your account** — Sign up with email and password
+        2. **Strategic Event Planning** — Create an event, answer "What change am I trying to make?"
+        3. **Inventory Management** — Add your pieces with SKUs and pricing
+        4. **Event Management** — Record what you brought and sold
+        5. **Event Reflection Journal** — Capture insights while fresh
+        6. **Business Insights** — Get make more/less recommendations
         """)
     with st.expander("How to Read Insights"):
         st.markdown("""
@@ -467,6 +582,13 @@ def help_section():
         - **MAKE LESS** → <20% sell-through — low demand
 
         You need at least **2 completed events** with inventory data for insights to appear.
+        """)
+    with st.expander("Your Data & Privacy"):
+        st.markdown("""
+        - Your data is private — no other user can see it
+        - Data is stored securely in the cloud
+        - You can access your data from any device by logging in
+        - Deleting an event removes all related inventory and reflections
         """)
     st.info("Use insights to inform decisions, but always stay true to your artistic vision.")
 
@@ -483,7 +605,8 @@ def strategic_event_planning():
     if not events_df.empty:
         with st.expander("Edit Existing Event", expanded=False):
             event_options = ["Create New Event"] + [
-                f"{row['name']} - {row['event_date']}" for _, row in events_df.iterrows()]
+                f"{row['name']} - {row['event_date']}" 
+                for _, row in events_df.iterrows()]
             selected_option = st.selectbox("Select Event", event_options)
             if selected_option != "Create New Event":
                 edit_mode = True
@@ -508,15 +631,18 @@ def strategic_event_planning():
         event_date = st.date_input("Event Date", value=default_date)
         location = st.text_input("Location", value=ev("location"))
         event_type_options = ["Art Fair", "Farmers Market", "Studio Sale", "Gallery Show",
-                              "Holiday Market", "Pop-up Shop", "Commission Show", "Online Sale", "Other"]
+                              "Holiday Market", "Pop-up Shop", "Commission Show", 
+                              "Online Sale", "Other"]
         et = ev("event_type", "Art Fair")
         event_type_idx = event_type_options.index(et) if et in event_type_options else 0
         event_type = st.selectbox("Event Type", event_type_options, index=event_type_idx)
     with col2:
-        booth_fee = st.number_input("Booth Fee ($)", min_value=0.0, step=25.0, value=safe_float(ev("booth_fee")))
+        booth_fee = st.number_input("Booth Fee ($)", min_value=0.0, step=25.0,
+                                   value=safe_float(ev("booth_fee")))
         setup_time = st.text_input("Setup Time", value=ev("setup_time"))
         st.selectbox("Expected Attendance",
-            ["Small (< 100)", "Medium (100-500)", "Large (500-1000)", "Very Large (1000+)"])
+            ["Small (< 100)", "Medium (100-500)", 
+             "Large (500-1000)", "Very Large (1000+)"])
         st.number_input("Revenue Goal ($)", min_value=0.0, step=100.0)
 
     st.subheader("Strategic Intent")
@@ -538,9 +664,11 @@ def strategic_event_planning():
                                       placeholder="Who is your ideal customer?")
         price_strategy = st.text_area("Pricing Strategy", value=ev("price_strategy"),
                                      placeholder="How will you price for this audience?")
-        st.text_area("What Makes Your Work Special?", placeholder="What sets your pottery apart?")
+        st.text_area("What Makes Your Work Special?",
+                    placeholder="What sets your pottery apart?")
 
-    completed = st.checkbox("Event completed - add results", value=(ev("status") == "completed"))
+    completed = st.checkbox("Event completed - add results",
+                           value=(ev("status") == "completed"))
     weather_actual, foot_traffic, total_revenue = "", "Moderate", 0.0
     cash_sales, card_sales, change_achieved = 0.0, 0.0, ""
 
@@ -560,8 +688,9 @@ def strategic_event_planning():
             ft_val = ev("foot_traffic", "Moderate")
             ft_idx = ft_options.index(ft_val) if ft_val in ft_options else 1
             foot_traffic = st.selectbox("Foot Traffic", ft_options, index=ft_idx)
-            change_achieved = st.text_area("Did you achieve the change you were seeking?",
-                                         placeholder="Reflect on your progress toward your change goal...")
+            change_achieved = st.text_area(
+                "Did you achieve the change you were seeking?",
+                placeholder="Reflect on your progress toward your change goal...")
 
     button_label = "Update Event" if edit_mode else "Save Event Plan"
     if st.button(button_label, type="primary"):
@@ -570,10 +699,12 @@ def strategic_event_planning():
             return None
 
         event_data = {
-            "name": name, "event_date": event_date, "location": location, "event_type": event_type,
-            "theme": theme_name, "theme_description": theme_description, "change_goal": change_goal,
+            "name": name, "event_date": event_date, "location": location,
+            "event_type": event_type, "theme": theme_name,
+            "theme_description": theme_description, "change_goal": change_goal,
             "color_palette": color_palette, "target_customer": target_customer,
-            "price_strategy": price_strategy, "booth_fee": booth_fee, "setup_time": setup_time,
+            "price_strategy": price_strategy, "booth_fee": booth_fee,
+            "setup_time": setup_time,
             "weather": weather_actual if completed else "",
             "foot_traffic": foot_traffic if completed else "",
             "total_revenue": total_revenue if completed else 0,
@@ -608,7 +739,8 @@ def reflection_journal():
         st.info("No events found. Create an event first to start journaling.")
         return
 
-    event_options = [f"{row['name']} - {row['event_date']}" for _, row in events_df.iterrows()]
+    event_options = [f"{row['name']} - {row['event_date']}" 
+                    for _, row in events_df.iterrows()]
     selected_event = st.selectbox("Select Event to Reflect On", event_options)
 
     if selected_event:
@@ -637,15 +769,17 @@ def reflection_journal():
         col3, col4 = st.columns(2)
         with col3:
             reflection_category = st.selectbox("Reflection Type", [
-                "What Worked Well", "What Didn't Work", "Customer Interactions & Feedback",
-                "Pricing Observations", "Display & Setup Insights", "Competition & Market Analysis",
-                "Next Time Planning", "Creative Discoveries", "Business Learning", "Change Progress"
+                "What Worked Well", "What Didn't Work",
+                "Customer Interactions & Feedback", "Pricing Observations",
+                "Display & Setup Insights", "Competition & Market Analysis",
+                "Next Time Planning", "Creative Discoveries",
+                "Business Learning", "Change Progress"
             ])
             customer_interaction = st.checkbox("Customer interaction note")
             price_insight = st.checkbox("Contains pricing insights")
         with col4:
             reflection_content = st.text_area("Reflection Content", height=150,
-                                            placeholder="What did you observe? What did you learn?")
+                placeholder="What did you observe? What did you learn?")
 
         if st.button("Save Reflection") and reflection_content:
             add_reflection(event_id, reflection_category, reflection_content,
@@ -736,7 +870,7 @@ def business_insights_dashboard():
             st.metric("Best Performing Price Range", best["price_range"],
                      f"{best['avg_sell_through_rate']:.1%} sell-through")
             if best["avg_sell_through_rate"] > 0.7:
-                st.success(f"Focus more inventory in the {best['price_range']} range - strong demand!")
+                st.success(f"Focus more inventory in the {best['price_range']} range!")
             else:
                 st.info(f"Consider experimenting with the {best['price_range']} range")
         st.dataframe(price_df, use_container_width=True)
@@ -784,7 +918,8 @@ def business_insights_dashboard():
                 with st.expander(f"{season} - Top Items"):
                     for _, item in season_data.head(5).iterrows():
                         st.write(f"• **{item['item_name']}** - {item['total_sold']} sold, "
-                                f"${item['avg_price']:.2f} avg, {item['avg_sell_through_rate']:.1%} sell-through")
+                                f"${item['avg_price']:.2f} avg, "
+                                f"{item['avg_sell_through_rate']:.1%} sell-through")
 
     if "event_performance" in insights and not insights["event_performance"].empty:
         st.subheader("Event Type Performance")
@@ -868,7 +1003,7 @@ def inventory_management():
             col11, col12 = st.columns(2)
             with col11:
                 quantity_change = st.number_input("Quantity change", value=0.0, step=1.0,
-                                                help="Positive to add stock, negative to remove")
+                    help="Positive to add stock, negative to remove")
             with col12:
                 reference = st.text_input("Reference/Reason",
                     placeholder="e.g., 'Completed firing'")
@@ -888,7 +1023,8 @@ def event_management():
         st.info("No events found. Use 'Strategic Event Planning' to create your first event.")
         return
 
-    event_options = [f"{row['name']} - {row['event_date']}" for _, row in events_df.iterrows()]
+    event_options = [f"{row['name']} - {row['event_date']}" 
+                    for _, row in events_df.iterrows()]
     selected_event = st.selectbox("Select Event to Manage", event_options)
 
     if selected_event:
@@ -1001,20 +1137,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-try:
-    init_db()
-except Exception as e:
-    st.error(f"Database initialization error: {e}")
+# =============== AUTH GATE ===============
+
+if not check_auth():
+    login_page()
     st.stop()
+
+# =============== MAIN APP (authenticated users only) ===============
 
 st.markdown("""
 <div class="main-header">
-    <h1>Maker Strategy Pro</h1>
+    <h1>🏺 Maker Strategy Pro</h1>
     <p>Strategic planning and business insights for artists.</p>
 </div>
 """, unsafe_allow_html=True)
 
+# Sidebar with user info and logout
 st.sidebar.title("Navigation")
+st.sidebar.markdown(f"👤 **{st.session_state.user.email}**")
+if st.sidebar.button("Sign Out"):
+    logout()
+
 menu_options = [
     "Strategic Event Planning", "Dashboard", "Event Reflection Journal",
     "Business Insights", "Event Management", "Inventory Management", "About", "Help"
@@ -1030,8 +1173,8 @@ elif menu == "Dashboard":
     st.header("Overview Dashboard")
     try:
         sb = get_client()
-        events_df = to_df(sb.table("events").select("*").execute().data)
-        item_count = len(sb.table("items").select("id").execute().data or [])
+        events_df = to_df(sb.table("events").select("*").eq("user_id", uid()).execute().data)
+        item_count = len(sb.table("items").select("id").eq("user_id", uid()).execute().data or [])
 
         if not events_df.empty:
             events_df["total_revenue"] = pd.to_numeric(
