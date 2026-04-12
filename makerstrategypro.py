@@ -8,8 +8,16 @@ import numpy as np
 # =============== DATABASE CONNECTION ===============
 
 def get_conn():
+    import socket
     db_url = st.secrets["database"]["url"]
-    return psycopg2.connect(db_url, sslmode="require")
+    # Force IPv4 by resolving hostname and replacing it in the URL
+    from urllib.parse import urlparse, urlunparse
+    parsed = urlparse(db_url)
+    hostname = parsed.hostname
+    ipv4 = next(r[4][0] for r in socket.getaddrinfo(hostname, parsed.port, socket.AF_INET))
+    netloc = f"{parsed.username}:{parsed.password}@{ipv4}:{parsed.port}"
+    ipv4_url = urlunparse(parsed._replace(netloc=netloc))
+    return psycopg2.connect(ipv4_url, sslmode="require")
 
 def init_db():
     with get_conn() as conn:
